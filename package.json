@@ -1,0 +1,8 @@
+{
+  "name": "telegram-control-panel",
+  "version": "1.0.0",
+  "dependencies": {
+    "firebase": "^10.12.0",
+    "telegram": "^2.22.2"
+  }
+}
