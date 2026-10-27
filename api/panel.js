@@ -16,35 +16,80 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getDatabase(app);
 
+// Non-blocking disconnect so Vercel never hangs
+async function safeDisconnect(client) {
+  try {
+    await Promise.race([
+      client.destroy(),
+      new Promise((resolve) => setTimeout(resolve, 400))
+    ]);
+  } catch (e) {}
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
-    return res.status(200).json({ reply: "✅ Multi-Account Control Panel API Active!" });
+    return res.status(200).json({ reply: "⚡ TELEGRAM CONTROL PANEL API IS ONLINE ⚡" });
   }
 
   const { action, input, apiId, apiHash } = req.body;
 
   try {
+    // ================= 1. SAVE API ID & HASH =================
     if (action === "save_api") {
       const cleanId = parseInt(String(apiId).replace(/\D/g, ""), 10);
       const cleanHash = String(apiHash).replace(/[^a-zA-Z0-9]/g, "").trim();
 
       if (!cleanId || cleanHash.length < 20) {
-        return res.status(200).json({ nextStep: "", reply: "❌ Shukicha API ID kinva API Hash!" });
+        return res.status(200).json({
+          nextStep: "",
+          reply:
+            "╔══════════════════════════╗\n" +
+            "   ❌ <b>INVALID API CREDENTIALS</b>\n" +
+            "╚══════════════════════════╝\n\n" +
+            "⚠️ Please enter a valid <b>App api_id</b> and <b>App api_hash</b> from <code>my.telegram.org</code>."
+        });
       }
 
       await set(ref(db, "panel/api_config"), { apiId: cleanId, apiHash: cleanHash });
-      return res.status(200).json({ nextStep: "", reply: "✅ API ID aani API Hash save zale! Aata ADD ACCOUNT daba." });
+
+      return res.status(200).json({
+        nextStep: "",
+        reply:
+          "╔══════════════════════════╗\n" +
+          "   ✅ <b>API CONFIGURED SUCCESSFULLY</b>\n" +
+          "╚══════════════════════════╝\n\n" +
+          "🔢 <b>API ID:</b> <code>" + cleanId + "</code>\n" +
+          "🔑 <b>API HASH:</b> <code>" + cleanHash.substring(0, 10) + "••••••••••</code>\n" +
+          "🗄️ <b>Database:</b> <code>Firebase Connected</code>\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━\n" +
+          "👉 Now tap <b>➕ ADD ACCOUNT</b> to connect your Telegram accounts!"
+      });
     }
 
+    // ================= CHECK API CONFIG =================
     const apiSnap = await get(ref(db, "panel/api_config"));
     if (!apiSnap.exists()) {
-      return res.status(200).json({ nextStep: "", reply: "⚠️ Aadhi SET API ID/HASH daban API set kara!" });
+      return res.status(200).json({
+        nextStep: "",
+        reply:
+          "╔══════════════════════════╗\n" +
+          "   ⚠️ <b>API CONFIGURATION REQUIRED</b>\n" +
+          "╚══════════════════════════╝\n\n" +
+          "Please tap <b>⚙️ SET API ID/HASH</b> first to configure your Telegram API credentials."
+      });
     }
     const { apiId: SAVED_API_ID, apiHash: SAVED_API_HASH } = apiSnap.val();
 
+    // ================= 2. SEND OTP CODE =================
     if (action === "send_code") {
-      const phone = input.replace(/\s+/g, "").trim();
-      const client = new TelegramClient(new StringSession(""), Number(SAVED_API_ID), SAVED_API_HASH, { connectionRetries: 3 });
+      const phone = "+" + String(input).replace(/\D/g, "");
+      const client = new TelegramClient(
+        new StringSession(""),
+        Number(SAVED_API_ID),
+        SAVED_API_HASH,
+        { connectionRetries: 3 }
+      );
+
       await client.connect();
 
       const result = await client.invoke(
@@ -52,33 +97,63 @@ module.exports = async (req, res) => {
           phoneNumber: phone,
           apiId: Number(SAVED_API_ID),
           apiHash: SAVED_API_HASH,
-          settings: new Api.CodeSettings({}),
+          settings: new Api.CodeSettings({})
         })
       );
 
       const tempSession = client.session.save();
+
       await set(ref(db, "panel/auth_temp"), {
         phone: phone,
         phoneCodeHash: result.phoneCodeHash,
         tempSession: tempSession,
+        timestamp: Date.now()
       });
 
-      await client.disconnect();
+      await safeDisconnect(client);
+
       return res.status(200).json({
         nextStep: "wait_otp",
-        reply: "📩 <b>OTP pathavla ahe!</b> (" + phone + ")\n\nAata Telegram var aलेला 5 anki OTP pathva:"
+        reply:
+          "╔══════════════════════════╗\n" +
+          "   📩 <b>VERIFICATION CODE SENT</b>\n" +
+          "╚══════════════════════════╝\n\n" +
+          "📱 <b>Target Phone:</b> <code>" + phone + "</code>\n" +
+          "📡 <b>Status:</b> <code>Waiting for OTP...</code>\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━\n" +
+          "⚠️ <b>CRITICAL SECURITY RULE:</b>\n" +
+          "Do <b>NOT</b> send the 5-digit code directly! Always put <b>SPACES</b> between digits so Telegram does not expire it:\n\n" +
+          "✅ <b>Correct Format:</b> <code>1 2 3 4 5</code>\n" +
+          "❌ <b>Wrong Format:</b> <code>12345</code>\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━\n" +
+          "👇 <i>Send your spaced 5-digit OTP now:</i>"
       });
     }
 
+    // ================= 3. VERIFY OTP & LOGIN =================
     if (action === "verify_code") {
-      const code = input.trim();
+      const code = String(input).replace(/\D/g, "");
       const snap = await get(ref(db, "panel/auth_temp"));
+
       if (!snap.exists()) {
-        return res.status(200).json({ nextStep: "", reply: "❌ Session sampale ahe. Punha ADD ACCOUNT kara." });
+        return res.status(200).json({
+          nextStep: "",
+          reply:
+            "╔══════════════════════════╗\n" +
+            "   ❌ <b>LOGIN SESSION NOT FOUND</b>\n" +
+            "╚══════════════════════════╝\n\n" +
+            "⚠️ Please tap <b>➕ ADD ACCOUNT</b> and send your phone number again."
+        });
       }
 
       const { phone, phoneCodeHash, tempSession } = snap.val();
-      const client = new TelegramClient(new StringSession(tempSession), Number(SAVED_API_ID), SAVED_API_HASH, { connectionRetries: 3 });
+      const client = new TelegramClient(
+        new StringSession(tempSession),
+        Number(SAVED_API_ID),
+        SAVED_API_HASH,
+        { connectionRetries: 3 }
+      );
+
       await client.connect();
 
       try {
@@ -86,23 +161,37 @@ module.exports = async (req, res) => {
           new Api.auth.SignIn({
             phoneNumber: phone,
             phoneCodeHash: phoneCodeHash,
-            phoneCode: code,
+            phoneCode: code
           })
         );
       } catch (err) {
         if (err.message && err.message.includes("SESSION_PASSWORD_NEEDED")) {
-          await client.disconnect();
+          const updatedSession = client.session.save();
+          await set(ref(db, "panel/auth_temp"), {
+            phone: phone,
+            phoneCodeHash: phoneCodeHash,
+            tempSession: updatedSession,
+            timestamp: Date.now()
+          });
+          await safeDisconnect(client);
+
           return res.status(200).json({
             nextStep: "wait_2fa",
-            reply: "🔒 <b>2FA Password Pahije!</b>\n\nTumchya account la Two-Step Verification password ahe. Krupaya tumcha **Cloud Password** pathva:"
+            reply:
+              "╔══════════════════════════╗\n" +
+              "   🔐 <b>2FA PASSWORD REQUIRED</b>\n" +
+              "╚══════════════════════════╝\n\n" +
+              "🛡️ Two-Step Verification is enabled on <code>" + phone + "</code>.\n\n" +
+              "👇 <i>Please send your Telegram Cloud Password now:</i>"
           });
         }
+        await safeDisconnect(client);
         throw err;
       }
 
       const finalSession = client.session.save();
       const me = await client.getMe();
-      await client.disconnect();
+      await safeDisconnect(client);
 
       const accSnap = await get(ref(db, "panel/accounts"));
       let accounts = accSnap.exists() ? accSnap.val() : [];
@@ -113,6 +202,7 @@ module.exports = async (req, res) => {
         if (accounts[i].phone === phone) {
           accounts[i].session = finalSession;
           accounts[i].name = me.firstName || "User";
+          accounts[i].username = me.username || "None";
           exists = true;
           break;
         }
@@ -122,7 +212,7 @@ module.exports = async (req, res) => {
         accounts.push({
           phone: phone,
           name: me.firstName || "User",
-          username: me.username || "",
+          username: me.username || "None",
           session: finalSession,
           addedOn: new Date().toLocaleDateString("en-IN")
         });
@@ -133,29 +223,54 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({
         nextStep: "",
-        reply: "✅ <b>Account Successfully Connected!</b>\n\n👤 <b>Name:</b> " + (me.firstName || "User") + "\n📱 <b>Phone:</b> <code>" + phone + "</code>\n📊 <b>Total IDs:</b> " + accounts.length
+        reply:
+          "╔══════════════════════════╗\n" +
+          "   🎉 <b>ACCOUNT CONNECTED!</b>\n" +
+          "╚══════════════════════════╝\n\n" +
+          "👤 <b>Account Name:</b> " + (me.firstName || "User") + "\n" +
+          "🌐 <b>Username:</b> @" + (me.username || "None") + "\n" +
+          "📱 <b>Phone Number:</b> <code>" + phone + "</code>\n" +
+          "🔋 <b>Session Status:</b> <code>🟢 ACTIVE</code>\n" +
+          "📊 <b>Total Connected IDs:</b> <code>" + accounts.length + " Accounts</code>\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━\n" +
+          "⚡ <i>Tap <b>➕ ADD ACCOUNT</b> to add more IDs or <b>📥 JOIN CHANNEL</b> to start!</i>"
       });
     }
 
+    // ================= 4. VERIFY 2FA PASSWORD =================
     if (action === "verify_2fa") {
-      const password = input.trim();
+      const password = String(input).trim();
       const snap = await get(ref(db, "panel/auth_temp"));
+
       if (!snap.exists()) {
-        return res.status(200).json({ nextStep: "", reply: "❌ Session sampale ahe. Punha ADD ACCOUNT kara." });
+        return res.status(200).json({
+          nextStep: "",
+          reply: "❌ <b>Session Expired!</b> Please tap <b>➕ ADD ACCOUNT</b> again."
+        });
       }
 
       const { phone, tempSession } = snap.val();
-      const client = new TelegramClient(new StringSession(tempSession), Number(SAVED_API_ID), SAVED_API_HASH, { connectionRetries: 3 });
+      const client = new TelegramClient(
+        new StringSession(tempSession),
+        Number(SAVED_API_ID),
+        SAVED_API_HASH,
+        { connectionRetries: 3 }
+      );
+
       await client.connect();
-
-      const passwordInfo = await client.invoke(new Api.account.GetPassword({}));
-      const passwordHash = await client.computeCheckPassword(passwordInfo, password);
-
-      await client.invoke(new Api.auth.CheckPassword({ password: passwordHash }));
+      await client.signInWithPassword(
+        { apiId: Number(SAVED_API_ID), apiHash: SAVED_API_HASH },
+        {
+          password: async () => password,
+          onError: (err) => {
+            throw err;
+          }
+        }
+      );
 
       const finalSession = client.session.save();
       const me = await client.getMe();
-      await client.disconnect();
+      await safeDisconnect(client);
 
       const accSnap = await get(ref(db, "panel/accounts"));
       let accounts = accSnap.exists() ? accSnap.val() : [];
@@ -164,7 +279,7 @@ module.exports = async (req, res) => {
       accounts.push({
         phone: phone,
         name: me.firstName || "User",
-        username: me.username || "",
+        username: me.username || "None",
         session: finalSession,
         addedOn: new Date().toLocaleDateString("en-IN")
       });
@@ -174,36 +289,76 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({
         nextStep: "",
-        reply: "✅ <b>2FA Verified & Account Added!</b>\n\n👤 <b>Name:</b> " + (me.firstName || "User") + "\n📱 <b>Phone:</b> <code>" + phone + "</code>"
+        reply:
+          "╔══════════════════════════╗\n" +
+          "   🎉 <b>2FA VERIFIED & CONNECTED!</b>\n" +
+          "╚══════════════════════════╝\n\n" +
+          "👤 <b>Name:</b> " + (me.firstName || "User") + "\n" +
+          "📱 <b>Phone:</b> <code>" + phone + "</code>\n" +
+          "📊 <b>Total Connected IDs:</b> <code>" + accounts.length + " Accounts</code>"
       });
     }
 
+    // ================= LOAD CONNECTED ACCOUNTS =================
     const accSnap = await get(ref(db, "panel/accounts"));
     let accounts = accSnap.exists() ? accSnap.val() : [];
     if (!Array.isArray(accounts)) accounts = Object.values(accounts);
 
+    // ================= 5. MY ACCOUNTS LIST =================
     if (action === "my_accounts") {
-      if (accounts.length === 0) return res.status(200).json({ nextStep: "", reply: "📭 Kontelehi account jodlele nahi." });
-      let msg = "<b>📱 CONNECTED ACCOUNTS (" + accounts.length + ")</b>\n\n";
-      for (let i = 0; i < accounts.length; i++) {
-        msg += (i + 1) + ". " + accounts[i].name + " (`" + accounts[i].phone + "`)\n";
+      if (accounts.length === 0) {
+        return res.status(200).json({
+          nextStep: "",
+          reply:
+            "╔══════════════════════════╗\n" +
+            "   📭 <b>NO ACCOUNTS CONNECTED</b>\n" +
+            "╚══════════════════════════╝\n\n" +
+            "⚠️ You have <b>0</b> connected Telegram accounts.\n" +
+            "👉 Tap <b>➕ ADD ACCOUNT</b> below to connect your 11 IDs!"
+        });
       }
+
+      let msg =
+        "╔══════════════════════════╗\n" +
+        "   📱 <b>CONNECTED ACCOUNTS MANAGER</b>\n" +
+        "╚══════════════════════════╝\n" +
+        "🔋 <b>Total Active IDs:</b> <code>" + accounts.length + " Accounts</code>\n" +
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n";
+
+      for (let i = 0; i < accounts.length; i++) {
+        msg +=
+          "<b>[" + (i + 1) + "] " + accounts[i].name + "</b>\n" +
+          " ┣ 📱 <b>Phone:</b> <code>" + accounts[i].phone + "</code>\n" +
+          " ┗ 🟢 <b>Status:</b> <code>Ready for Auto-Action</code>\n\n";
+      }
+
+      msg += "━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>All accounts are synced with Firebase Realtime DB.</i>";
       return res.status(200).json({ nextStep: "", reply: msg });
     }
 
     if (accounts.length === 0) {
-      return res.status(200).json({ nextStep: "", reply: "⚠️ Aadhi ADD ACCOUNT dabun ID joda." });
+      return res.status(200).json({
+        nextStep: "",
+        reply: "⚠️ <b>No Active Accounts!</b> Please tap <b>➕ ADD ACCOUNT</b> first."
+      });
     }
 
+    // ================= 6. AUTO JOIN CHANNEL (ALL ACCOUNTS) =================
     if (action === "join") {
-      const channelInput = input.trim();
+      const channelInput = String(input).trim();
       let title = channelInput;
       let targetId = channelInput;
       let successCount = 0;
+      let failCount = 0;
 
       await Promise.allSettled(
         accounts.map(async (acc) => {
-          const client = new TelegramClient(new StringSession(acc.session), Number(SAVED_API_ID), SAVED_API_HASH, { connectionRetries: 2 });
+          const client = new TelegramClient(
+            new StringSession(acc.session),
+            Number(SAVED_API_ID),
+            SAVED_API_HASH,
+            { connectionRetries: 2 }
+          );
           try {
             await client.connect();
             if (channelInput.indexOf("+") !== -1 || channelInput.indexOf("joinchat/") !== -1) {
@@ -223,74 +378,195 @@ module.exports = async (req, res) => {
             }
             successCount++;
           } catch (e) {
-            if (e.message && e.message.includes("USER_ALREADY_PARTICIPANT")) successCount++;
+            if (e.message && e.message.includes("USER_ALREADY_PARTICIPANT")) {
+              successCount++;
+            } else {
+              failCount++;
+            }
           } finally {
-            await client.disconnect();
+            await safeDisconnect(client);
           }
         })
       );
 
+      const listSnap = await get(ref(db, "panel/channels"));
+      let channels = listSnap.exists() ? listSnap.val() : [];
+      if (!Array.isArray(channels)) channels = Object.values(channels);
+
+      let found = false;
+      for (let i = 0; i < channels.length; i++) {
+        if (channels[i].input === channelInput || channels[i].targetId === targetId) {
+          channels[i].status = "🟢 JOINED (" + successCount + "/" + accounts.length + " IDs)";
+          channels[i].title = title;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        channels.push({
+          title: title,
+          input: channelInput,
+          targetId: targetId,
+          status: "🟢 JOINED (" + successCount + "/" + accounts.length + " IDs)",
+          date: new Date().toLocaleDateString("en-IN")
+        });
+      }
+
+      await set(ref(db, "panel/channels"), channels);
+
       return res.status(200).json({
         nextStep: "",
-        reply: "✅ <b>AUTO JOIN COMPLETED!</b>\n\n📢 <b>Channel:</b> " + title + "\n🟢 <b>Joined IDs:</b> " + successCount + " / " + accounts.length
+        reply:
+          "╔══════════════════════════╗\n" +
+          "   📥 <b>AUTO-JOIN EXECUTED!</b>\n" +
+          "╚══════════════════════════╝\n\n" +
+          "📢 <b>Channel Name:</b> " + title + "\n" +
+          "🔗 <b>Target Link:</b> <code>" + channelInput + "</code>\n" +
+          "🟢 <b>Successfully Joined:</b> <code>" + successCount + " / " + accounts.length + " IDs</code>\n" +
+          "🔴 <b>Failed / Restricted:</b> <code>" + failCount + " IDs</code>\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━\n" +
+          "✅ <i>Channel saved to Firebase Channel List!</i>"
       });
     }
 
+    // ================= 7. LEAVE CHANNEL MENU =================
     if (action === "leave_menu") {
       const listSnap = await get(ref(db, "panel/channels"));
       let channels = listSnap.exists() ? listSnap.val() : [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
 
-      let msg = "<b>📤 LEAVE CHANNEL</b>\n\n";
-      for (let i = 0; i < channels.length; i++) {
-        msg += (i + 1) + ". " + channels[i].title + " (`" + channels[i].input + "`)\n";
+      if (channels.length === 0) {
+        return res.status(200).json({
+          nextStep: "",
+          reply:
+            "╔══════════════════════════╗\n" +
+            "   📭 <b>NO CHANNELS FOUND</b>\n" +
+            "╚══════════════════════════╝\n\n" +
+            "⚠️ Your channel database is currently empty."
+        });
       }
-      msg += "\n👉 Baher padnyasathi channel cha number pathva:";
+
+      let msg =
+        "╔══════════════════════════╗\n" +
+        "   📤 <b>SELECT CHANNEL TO LEAVE</b>\n" +
+        "╚══════════════════════════╝\n\n";
+
+      for (let i = 0; i < channels.length; i++) {
+        msg +=
+          "<b>[" + (i + 1) + "] " + channels[i].title + "</b>\n" +
+          " ┣ 🔗 <code>" + channels[i].input + "</code>\n" +
+          " ┗ 📊 <b>Status:</b> " + channels[i].status + "\n\n";
+      }
+
+      msg +=
+        "━━━━━━━━━━━━━━━━━━━━━━\n" +
+        "👇 <i>Send the <b>Channel Number</b> (e.g., <code>1</code> or <code>2</code>) to leave from all accounts:</i>";
+
       return res.status(200).json({ nextStep: "wait_leave", reply: msg });
     }
 
+    // ================= 8. AUTO LEAVE CHANNEL (ALL ACCOUNTS) =================
     if (action === "leave") {
-      const index = parseInt(input.trim()) - 1;
+      const index = parseInt(String(input).trim(), 10) - 1;
       const listSnap = await get(ref(db, "panel/channels"));
       let channels = listSnap.exists() ? listSnap.val() : [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
 
-      if (isNaN(index) || !channels[index]) return res.status(200).json({ nextStep: "", reply: "❌ Chukicha number!" });
+      if (isNaN(index) || !channels[index]) {
+        return res.status(200).json({
+          nextStep: "",
+          reply: "❌ <b>Invalid Channel Number!</b> Please tap <b>📤 LEAVE CHANNEL</b> and select a valid number."
+        });
+      }
+
       const targetChannel = channels[index];
       let leftCount = 0;
 
       await Promise.allSettled(
         accounts.map(async (acc) => {
-          const client = new TelegramClient(new StringSession(acc.session), Number(SAVED_API_ID), SAVED_API_HASH, { connectionRetries: 2 });
+          const client = new TelegramClient(
+            new StringSession(acc.session),
+            Number(SAVED_API_ID),
+            SAVED_API_HASH,
+            { connectionRetries: 2 }
+          );
           try {
             await client.connect();
             let cleanTarget = targetChannel.targetId.replace("https://t.me/", "").trim();
             await client.invoke(new Api.channels.LeaveChannel({ channel: cleanTarget }));
             leftCount++;
-          } catch (e) {} finally {
-            await client.disconnect();
+          } catch (e) {
+          } finally {
+            await safeDisconnect(client);
           }
         })
       );
 
-      return res.status(200).json({ nextStep: "", reply: "✅ <b>AUTO LEAVE COMPLETED!</b>\n\nLeft from IDs: " + leftCount + " / " + accounts.length });
+      channels[index].status = "🔴 LEFT (" + leftCount + "/" + accounts.length + " IDs)";
+      await set(ref(db, "panel/channels"), channels);
+
+      return res.status(200).json({
+        nextStep: "",
+        reply:
+          "╔══════════════════════════╗\n" +
+          "   📤 <b>AUTO-LEAVE COMPLETED!</b>\n" +
+          "╚══════════════════════════╝\n\n" +
+          "📢 <b>Channel Name:</b> " + targetChannel.title + "\n" +
+          "🔗 <b>Channel Link:</b> <code>" + targetChannel.input + "</code>\n" +
+          "🔴 <b>Accounts Left:</b> <code>" + leftCount + " / " + accounts.length + " IDs</code>\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━\n" +
+          "✅ <i>Channel status updated in Firebase!</i>"
+      });
     }
 
+    // ================= 9. CHANNEL LIST & STATUS =================
     if (action === "list") {
       const listSnap = await get(ref(db, "panel/channels"));
       let channels = listSnap.exists() ? listSnap.val() : [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
 
-      let msg = "<b>📋 CHANNEL LIST</b>\n\n";
-      for (let i = 0; i < channels.length; i++) {
-        msg += (i + 1) + ". " + channels[i].title + " (" + channels[i].status + ")\n";
+      if (channels.length === 0) {
+        return res.status(200).json({
+          nextStep: "",
+          reply:
+            "╔══════════════════════════╗\n" +
+            "   📋 <b>REGISTERED CHANNEL LIST</b>\n" +
+            "╚══════════════════════════╝\n\n" +
+            "📭 No channels have been joined yet.\n" +
+            "👉 Tap <b>📥 JOIN CHANNEL</b> to add your first channel!"
+        });
       }
+
+      let msg =
+        "╔══════════════════════════╗\n" +
+        "   📋 <b>CHANNEL DATABASE & STATUS</b>\n" +
+        "╚══════════════════════════╝\n" +
+        "📱 <b>Connected Accounts:</b> <code>" + accounts.length + " IDs</code>\n" +
+        "📢 <b>Total Tracked Channels:</b> <code>" + channels.length + "</code>\n" +
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n";
+
+      for (let i = 0; i < channels.length; i++) {
+        msg +=
+          "<b>[" + (i + 1) + "] " + channels[i].title + "</b>\n" +
+          " ┣ 🔗 <b>Link:</b> <code>" + channels[i].input + "</code>\n" +
+          " ┗ 📌 <b>Status:</b> <b>" + channels[i].status + "</b>\n\n";
+      }
+
+      msg += "━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>Powered by Kumar Multi-Account Engine</i>";
       return res.status(200).json({ nextStep: "", reply: msg });
     }
 
-    return res.status(200).json({ nextStep: "", reply: "⚠️ Unknown action." });
-
+    return res.status(200).json({ nextStep: "", reply: "⚠️ Unknown Command Action." });
   } catch (err) {
-    return res.status(200).json({ nextStep: "", reply: "❌ <b>Error:</b> <code>" + (err.message || "Failed") + "</code>" });
+    return res.status(200).json({
+      nextStep: "",
+      reply:
+        "╔══════════════════════════╗\n" +
+        "   ❌ <b>SYSTEM EXECUTION ERROR</b>\n" +
+        "╚══════════════════════════╝\n\n" +
+        "🔍 <b>Reason:</b> <code>" + (err.message || "Operation Failed") + "</code>\n\n" +
+        "💡 <i>Tip: If you got PHONE_CODE_EXPIRED, always send the OTP with spaces (e.g. 1 2 3 4 5)!</i>"
+    });
   }
 };
