@@ -3,7 +3,7 @@ const { StringSession } = require("telegram/sessions");
 const PasswordHelper = require("telegram/Password");
 
 // ============================================================================
-// CONFIGURATION & FIREBASE REALTIME DATABASE REST ENGINE
+// FIREBASE REALTIME DATABASE CONFIGURATION & REST ENGINE
 // ============================================================================
 const DB_URL = "https://kumartelegrambot-default-rtdb.firebaseio.com";
 const MASTER_PIN = "252010";
@@ -44,10 +44,9 @@ function fastDisconnect(client) {
 }
 
 // ============================================================================
-// BULLETPROOF 2FA PASSWORD VERIFICATION ENGINE (FIXES computeCheckPassword)
+// BULLETPROOF 2FA CLOUD PASSWORD VERIFIER
 // ============================================================================
 async function verifyTelegram2FAPassword(client, apiId, apiHash, password) {
-  // Method 1: Official GramJS PasswordHelper.computeCheck
   if (PasswordHelper && typeof PasswordHelper.computeCheck === "function") {
     const passwordInfo = await client.invoke(new Api.account.GetPassword());
     const passwordSrp = await PasswordHelper.computeCheck(passwordInfo, password);
@@ -59,7 +58,6 @@ async function verifyTelegram2FAPassword(client, apiId, apiHash, password) {
     return true;
   }
 
-  // Method 2: Fallback if computeCheckPassword exists in another build
   if (PasswordHelper && typeof PasswordHelper.computeCheckPassword === "function") {
     const passwordInfo = await client.invoke(new Api.account.GetPassword());
     const passwordSrp = await PasswordHelper.computeCheckPassword(passwordInfo, password);
@@ -71,7 +69,6 @@ async function verifyTelegram2FAPassword(client, apiId, apiHash, password) {
     return true;
   }
 
-  // Method 3: Built-in TelegramClient signInWithPassword method
   if (typeof client.signInWithPassword === "function") {
     await client.signInWithPassword(
       {
@@ -90,65 +87,87 @@ async function verifyTelegram2FAPassword(client, apiId, apiHash, password) {
     return true;
   }
 
-  throw new Error("2FA module could not be initialized on server.");
+  throw new Error("2FA verification module unavailable on server.");
 }
 
 // ============================================================================
-// SUPER STYLISH CYBERPUNK WEB CONTROL PANEL UI
+// SUPER STYLISH ROYAL QUANTUM COMMAND CENTER UI (USING String.raw FOR 0 BUGS)
 // ============================================================================
 function renderMasterWebPanel() {
-  return `<!DOCTYPE html>
+  return String.raw`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>⚡ TELEGRAM MASTER CONTROL PANEL • MULTI-API EDITION ⚡</title>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <title>👑 KUMAR QUANTUM OS • TELEGRAM CONTROL PANEL 👑</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg-deep: #02050d;
-      --bg-panel: #080f1e;
-      --bg-card: rgba(12, 20, 38, 0.88);
-      --bg-card-hover: rgba(18, 29, 54, 0.95);
-      --bg-input: #050914;
-      --primary: #00f0ff;
-      --primary-glow: rgba(0, 240, 255, 0.38);
-      --secondary: #7c3aed;
-      --secondary-glow: rgba(124, 58, 237, 0.35);
+      --bg-base: #070312;
+      --bg-surface: #110926;
+      --bg-card: rgba(22, 12, 46, 0.86);
+      --bg-input: #0a0518;
+      --accent-main: #f59e0b;
+      --accent-glow: rgba(245, 158, 11, 0.42);
+      --accent-sec: #ec4899;
+      --accent-sec-glow: rgba(236, 72, 153, 0.38);
+      --accent-tert: #8b5cf6;
       --success: #10b981;
-      --success-glow: rgba(16, 185, 129, 0.38);
-      --danger: #ef4444;
-      --danger-glow: rgba(239, 68, 68, 0.38);
-      --warning: #f59e0b;
-      --warning-glow: rgba(245, 158, 11, 0.35);
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --border-color: rgba(0, 240, 255, 0.22);
-      --border-bright: rgba(0, 240, 255, 0.65);
+      --success-glow: rgba(16, 185, 129, 0.4);
+      --danger: #f43f5e;
+      --danger-glow: rgba(244, 63, 94, 0.4);
+      --text-primary: #ffffff;
+      --text-secondary: #cbd5e1;
+      --text-dim: #94a3b8;
+      --border-glass: rgba(245, 158, 11, 0.28);
+      --border-strong: rgba(245, 158, 11, 0.75);
+      --gradient-royal: linear-gradient(135deg, #f59e0b 0%, #ec4899 50%, #8b5cf6 100%);
+      --gradient-btn: linear-gradient(90deg, #f59e0b, #d97706);
     }
 
-    body.theme-matrix {
-      --primary: #00ff66;
-      --primary-glow: rgba(0, 255, 102, 0.38);
-      --secondary: #059669;
-      --border-color: rgba(0, 255, 102, 0.25);
-      --border-bright: rgba(0, 255, 102, 0.65);
+    body.theme-emerald {
+      --bg-base: #02100a;
+      --bg-surface: #062115;
+      --bg-card: rgba(8, 36, 24, 0.88);
+      --bg-input: #03140c;
+      --accent-main: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.42);
+      --accent-sec: #06b6d4;
+      --accent-tert: #3b82f6;
+      --border-glass: rgba(16, 185, 129, 0.3);
+      --border-strong: rgba(16, 185, 129, 0.8);
+      --gradient-royal: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%);
+      --gradient-btn: linear-gradient(90deg, #10b981, #059669);
     }
 
     body.theme-crimson {
-      --primary: #ff2a5f;
-      --primary-glow: rgba(255, 42, 95, 0.38);
-      --secondary: #991b1b;
-      --border-color: rgba(255, 42, 95, 0.25);
-      --border-bright: rgba(255, 42, 95, 0.65);
+      --bg-base: #120206;
+      --bg-surface: #240610;
+      --bg-card: rgba(40, 8, 18, 0.88);
+      --bg-input: #170309;
+      --accent-main: #ff2a5f;
+      --accent-glow: rgba(255, 42, 95, 0.45);
+      --accent-sec: #f97316;
+      --accent-tert: #eab308;
+      --border-glass: rgba(255, 42, 95, 0.3);
+      --border-strong: rgba(255, 42, 95, 0.8);
+      --gradient-royal: linear-gradient(135deg, #ff2a5f 0%, #f97316 50%, #eab308 100%);
+      --gradient-btn: linear-gradient(90deg, #ff2a5f, #e11d48);
     }
 
-    body.theme-gold {
-      --primary: #fbbf24;
-      --primary-glow: rgba(251, 191, 36, 0.38);
-      --secondary: #d97706;
-      --border-color: rgba(251, 191, 36, 0.25);
-      --border-bright: rgba(251, 191, 36, 0.65);
+    body.theme-cyber {
+      --bg-base: #020813;
+      --bg-surface: #07152b;
+      --bg-card: rgba(10, 25, 50, 0.88);
+      --bg-input: #040d1a;
+      --accent-main: #00f0ff;
+      --accent-glow: rgba(0, 240, 255, 0.45);
+      --accent-sec: #3b82f6;
+      --accent-tert: #a855f7;
+      --border-glass: rgba(0, 240, 255, 0.3);
+      --border-strong: rgba(0, 240, 255, 0.8);
+      --gradient-royal: linear-gradient(135deg, #00f0ff 0%, #3b82f6 50%, #a855f7 100%);
+      --gradient-btn: linear-gradient(90deg, #00f0ff, #0284c7);
     }
 
     * {
@@ -159,241 +178,253 @@ function renderMasterWebPanel() {
     }
 
     body {
-      background-color: var(--bg-deep);
-      color: var(--text-main);
-      font-family: 'Rajdhani', sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      font-family: 'Plus Jakarta Sans', sans-serif;
       min-height: 100vh;
       overflow-x: hidden;
-      position: relative;
-      background-image: 
-        radial-gradient(circle at 15% 20%, rgba(0, 240, 255, 0.05) 0%, transparent 40%),
-        radial-gradient(circle at 85% 80%, rgba(124, 58, 237, 0.06) 0%, transparent 40%);
+      background-image:
+        radial-gradient(circle at 10% 10%, var(--accent-glow) 0%, transparent 35%),
+        radial-gradient(circle at 90% 90%, var(--accent-sec-glow) 0%, transparent 35%);
+      background-attachment: fixed;
     }
 
-    #cyber-canvas {
+    /* ANIMATED GRID FLOOR */
+    .quantum-grid-bg {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 0;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 36px 36px;
       pointer-events: none;
-      opacity: 0.42;
+      z-index: 0;
     }
 
     /* ========================================================================
-       SECURITY LOCK SCREEN OVERLAY (PIN: 252010)
+       1. NEW ROYAL QUANTUM VAULT LOCK SCREEN (PIN: 252010)
        ======================================================================== */
-    #security-lock-screen {
+    #vault-overlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: radial-gradient(circle at center, #0b1329 0%, #02040a 100%);
+      inset: 0;
       z-index: 99999;
+      background: radial-gradient(circle at top, #1e0b3b 0%, #05010d 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 18px;
-      transition: opacity 0.45s ease, transform 0.45s ease;
+      padding: 16px;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
     }
 
-    #security-lock-screen.unlocked {
+    #vault-overlay.vault-open {
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
-      transform: scale(1.08);
     }
 
-    .lock-card {
+    .vault-container {
       width: 100%;
-      max-width: 430px;
-      background: rgba(8, 14, 28, 0.94);
-      border: 1px solid var(--border-bright);
-      border-radius: 26px;
-      padding: 28px 22px;
-      box-shadow: 0 0 60px var(--primary-glow), inset 0 0 30px rgba(0, 240, 255, 0.05);
+      max-width: 420px;
+      background: rgba(16, 8, 36, 0.94);
+      border: 2px solid var(--border-strong);
+      border-radius: 28px;
+      padding: 26px 20px;
+      box-shadow: 0 0 65px var(--accent-glow), inset 0 0 30px rgba(245, 158, 11, 0.08);
       text-align: center;
       position: relative;
       overflow: hidden;
       backdrop-filter: blur(20px);
     }
 
-    .lock-card::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 200%;
-      height: 3px;
-      background: linear-gradient(90deg, transparent, var(--primary), var(--secondary), transparent);
-      animation: scanline 2.8s linear infinite;
+    .vault-crown-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(245, 158, 11, 0.14);
+      border: 1px solid var(--accent-main);
+      color: var(--accent-main);
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      margin-bottom: 14px;
+      box-shadow: 0 0 20px var(--accent-glow);
     }
 
-    @keyframes scanline {
-      0% { transform: translateX(-50%); }
-      100% { transform: translateX(50%); }
+    .vault-heading {
+      font-family: 'Cinzel', serif;
+      font-size: 24px;
+      font-weight: 900;
+      background: var(--gradient-royal);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
     }
 
-    .shield-icon {
-      width: 74px;
-      height: 74px;
-      margin: 0 auto 14px;
-      border-radius: 50%;
-      background: rgba(0, 240, 255, 0.08);
-      border: 2px solid var(--primary);
+    .vault-subtext {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 18px;
+      font-weight: 600;
+    }
+
+    /* 6 DIGITAL LED DISPLAY BOXES */
+    .led-pin-boxes {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .led-box {
+      height: 50px;
+      background: #06020f;
+      border: 1.5px solid rgba(245, 158, 11, 0.35);
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 34px;
-      box-shadow: 0 0 28px var(--primary-glow);
-      animation: pulseGlow 2s infinite alternate;
-    }
-
-    @keyframes pulseGlow {
-      0% { box-shadow: 0 0 12px var(--primary-glow); transform: scale(0.97); }
-      100% { box-shadow: 0 0 32px var(--primary-glow); transform: scale(1.04); }
-    }
-
-    .lock-title {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 20px;
-      font-weight: 900;
-      color: var(--primary);
-      letter-spacing: 2px;
-      margin-bottom: 6px;
-      text-shadow: 0 0 12px var(--primary-glow);
-    }
-
-    .lock-subtitle {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 18px;
-      font-weight: 600;
-      letter-spacing: 0.6px;
-    }
-
-    .pin-dots-container {
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .pin-dot {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      border: 2px solid var(--primary);
-      background: transparent;
-      transition: all 0.2s ease;
-    }
-
-    .pin-dot.filled {
-      background: var(--primary);
-      box-shadow: 0 0 14px var(--primary);
-      transform: scale(1.15);
-    }
-
-    .pin-dot.error {
-      border-color: var(--danger);
-      background: var(--danger);
-      box-shadow: 0 0 14px var(--danger);
-      animation: shake 0.35s ease;
-    }
-
-    @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      25% { transform: translateX(-8px); }
-      75% { transform: translateX(8px); }
-    }
-
-    .pin-direct-input {
-      width: 100%;
-      padding: 12px 16px;
-      background: var(--bg-input);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      color: var(--primary);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 18px;
-      text-align: center;
-      letter-spacing: 6px;
-      margin-bottom: 16px;
-      outline: none;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent-main);
+      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.9);
+      transition: all 0.18s ease;
     }
 
-    .pin-direct-input:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 16px var(--primary-glow);
-    }
-
-    .numpad-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 11px;
-      margin-bottom: 16px;
-    }
-
-    .num-btn {
-      background: rgba(15, 23, 42, 0.92);
-      border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 14px 0;
-      color: var(--text-main);
-      font-family: 'Orbitron', sans-serif;
-      font-size: 19px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      user-select: none;
-    }
-
-    .num-btn:hover, .num-btn:active {
-      background: rgba(0, 240, 255, 0.16);
-      border-color: var(--primary);
-      color: var(--primary);
-      box-shadow: 0 0 16px var(--primary-glow);
+    .led-box.active-digit {
+      border-color: var(--accent-main);
+      background: rgba(245, 158, 11, 0.14);
+      box-shadow: 0 0 16px var(--accent-glow);
       transform: translateY(-2px);
     }
 
-    .num-btn.action-clear {
+    .led-box.error-shake {
+      border-color: var(--danger);
       color: var(--danger);
-      border-color: rgba(239, 68, 68, 0.35);
+      background: rgba(244, 63, 94, 0.15);
+      animation: shakeBox 0.35s ease;
+    }
+
+    @keyframes shakeBox {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-7px); }
+      75% { transform: translateX(7px); }
+    }
+
+    /* DIRECT KEYBOARD INPUT BAR + INSTANT UNLOCK */
+    .direct-pin-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .direct-pin-field {
+      flex: 1;
+      padding: 12px 14px;
+      background: #06020f;
+      border: 1.5px solid var(--border-glass);
+      border-radius: 12px;
+      color: #ffffff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 5px;
+      outline: none;
+    }
+
+    .direct-pin-field:focus {
+      border-color: var(--accent-main);
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .direct-unlock-btn {
+      background: var(--gradient-btn);
+      color: #05010d;
+      border: none;
+      border-radius: 12px;
+      padding: 0 18px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    /* 3D TACTILE KEYPAD */
+    .tactile-keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .key-tile {
+      background: linear-gradient(180deg, rgba(38, 20, 74, 0.9), rgba(18, 9, 38, 0.95));
+      border: 1px solid rgba(245, 158, 11, 0.32);
+      border-bottom: 3px solid rgba(245, 158, 11, 0.6);
+      border-radius: 14px;
+      padding: 13px 0;
+      color: #ffffff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.1s ease, background 0.15s ease;
+    }
+
+    .key-tile:active {
+      transform: translateY(2px);
+      background: var(--accent-main);
+      color: #000000;
+    }
+
+    .key-tile.key-clr {
+      color: #fda4af;
+      border-color: rgba(244, 63, 94, 0.45);
+      border-bottom-color: var(--danger);
       font-size: 14px;
     }
 
-    .num-btn.action-enter {
-      color: var(--success);
-      border-color: rgba(16, 185, 129, 0.35);
+    .key-tile.key-ok {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #ffffff;
+      border-color: #34d399;
+      border-bottom-color: #047857;
       font-size: 14px;
     }
 
-    #lock-status-msg {
+    #vault-feedback {
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
-      color: var(--text-muted);
+      color: var(--accent-main);
       min-height: 18px;
     }
 
     /* ========================================================================
-       MAIN DASHBOARD CONTAINER
+       2. MAIN ROYAL COMMAND CENTER LAYOUT
        ======================================================================== */
-    .app-wrapper {
+    .master-shell {
       position: relative;
       z-index: 1;
       max-width: 1180px;
       margin: 0 auto;
-      padding: 16px 14px 90px;
+      padding: 16px 14px 100px;
     }
 
-    .cyber-header {
-      background: linear-gradient(135deg, rgba(12, 20, 38, 0.95), rgba(7, 12, 24, 0.95));
-      border: 1px solid var(--border-bright);
-      border-radius: 22px;
-      padding: 20px 24px;
+    /* ROYAL TOP COMMAND HEADER */
+    .royal-header {
+      background: linear-gradient(135deg, rgba(26, 13, 54, 0.95), rgba(11, 5, 24, 0.96));
+      border: 1.5px solid var(--border-strong);
+      border-radius: 24px;
+      padding: 20px 22px;
       margin-bottom: 18px;
-      box-shadow: 0 0 35px rgba(0, 240, 255, 0.12);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 30px var(--accent-glow);
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -401,330 +432,284 @@ function renderMasterWebPanel() {
       gap: 14px;
     }
 
-    .brand-zone {
+    .royal-brand {
       display: flex;
       align-items: center;
-      gap: 15px;
+      gap: 14px;
     }
 
-    .brand-logo {
-      width: 56px;
-      height: 56px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, var(--primary), var(--secondary));
+    .royal-emblem {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      background: var(--gradient-royal);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 28px;
-      box-shadow: 0 0 22px var(--primary-glow);
+      box-shadow: 0 0 25px var(--accent-glow);
+      flex-shrink: 0;
     }
 
-    .brand-text h1 {
-      font-family: 'Orbitron', sans-serif;
+    .royal-title-block h1 {
+      font-family: 'Cinzel', serif;
       font-size: 21px;
       font-weight: 900;
-      color: var(--primary);
-      letter-spacing: 1.5px;
-      text-shadow: 0 0 10px var(--primary-glow);
+      color: var(--accent-main);
+      letter-spacing: 1.2px;
+      text-shadow: 0 0 14px var(--accent-glow);
     }
 
-    .brand-text p {
-      font-size: 13px;
-      color: var(--text-muted);
+    .royal-title-block p {
+      font-size: 12.5px;
+      color: var(--text-secondary);
       font-weight: 600;
+      margin-top: 2px;
     }
 
-    .header-controls {
+    .header-actions {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
     }
 
-    .cyber-badge {
-      background: rgba(0, 240, 255, 0.08);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
+    .theme-pill {
+      background: var(--bg-input);
+      border: 1px solid var(--border-glass);
+      color: var(--accent-main);
       padding: 8px 12px;
+      border-radius: 12px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
-      color: var(--text-main);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 8px var(--success);
-      animation: blink 1.5s infinite;
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    .theme-selector {
-      background: var(--bg-input);
-      border: 1px solid var(--border-color);
-      color: var(--primary);
-      border-radius: 10px;
-      padding: 7px 10px;
-      font-family: 'Orbitron', sans-serif;
-      font-size: 11px;
       font-weight: 700;
-      cursor: pointer;
       outline: none;
-    }
-
-    .btn-lock-now {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid var(--danger);
-      color: #fca5a5;
-      border-radius: 10px;
-      padding: 8px 14px;
-      font-family: 'Orbitron', sans-serif;
-      font-size: 11px;
-      font-weight: 700;
       cursor: pointer;
-      transition: 0.2s;
     }
 
-    .btn-lock-now:hover {
-      background: var(--danger);
-      color: #fff;
-      box-shadow: 0 0 15px var(--danger-glow);
+    .clock-pill {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid var(--border-glass);
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #ffffff;
+    }
+
+    .lock-btn-top {
+      background: rgba(244, 63, 94, 0.18);
+      border: 1px solid var(--danger);
+      color: #fda4af;
+      padding: 8px 14px;
+      border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
     }
 
     /* ========================================================================
-       TELEMETRY STATS GRID
+       4 HOLOGRAPHIC METRIC CARDS
        ======================================================================== */
-    .stats-grid {
+    .metrics-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 14px;
       margin-bottom: 18px;
     }
 
-    .stat-card {
+    .metric-box {
       background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 18px;
+      border: 1px solid var(--border-glass);
+      border-radius: 20px;
       padding: 18px;
       position: relative;
       overflow: hidden;
-      backdrop-filter: blur(10px);
-      transition: transform 0.2s ease, border-color 0.2s ease;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
     }
 
-    .stat-card:hover {
-      transform: translateY(-3px);
-      border-color: var(--primary);
+    .metric-box::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 70px;
+      height: 70px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
     }
 
-    .stat-label {
-      font-size: 12px;
-      color: var(--text-muted);
+    .metric-tag {
+      font-size: 11px;
+      font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 1px;
-      font-weight: 700;
+      color: var(--text-dim);
       margin-bottom: 6px;
     }
 
-    .stat-value {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 26px;
-      font-weight: 900;
-      color: var(--text-main);
+    .metric-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--accent-main);
     }
 
-    .stat-sub {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: var(--primary);
+    .metric-foot {
+      font-size: 11.5px;
+      color: var(--text-secondary);
       margin-top: 6px;
+      font-weight: 600;
     }
 
     /* ========================================================================
-       NAVIGATION TABS
+       NAVIGATION TABS BAR
        ======================================================================== */
-    .tabs-bar {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding-bottom: 6px;
+    .command-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
       margin-bottom: 18px;
-      scrollbar-width: none;
     }
 
-    .tabs-bar::-webkit-scrollbar {
-      display: none;
-    }
-
-    .tab-btn {
-      background: rgba(12, 20, 38, 0.85);
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
-      padding: 12px 18px;
-      border-radius: 12px;
-      font-family: 'Orbitron', sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.8px;
+    .cmd-tab {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: 16px;
+      padding: 14px 10px;
+      color: var(--text-secondary);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
       cursor: pointer;
-      white-space: nowrap;
       transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      gap: 8px;
     }
 
-    .tab-btn.active, .tab-btn:hover {
-      background: linear-gradient(90deg, rgba(0, 240, 255, 0.2), rgba(124, 58, 237, 0.2));
-      border-color: var(--primary);
-      color: var(--primary);
-      box-shadow: 0 0 18px var(--primary-glow);
+    .cmd-tab.active-tab {
+      background: var(--gradient-royal);
+      color: #ffffff;
+      border-color: #ffffff;
+      box-shadow: 0 0 25px var(--accent-glow);
+      transform: translateY(-2px);
     }
 
-    .tab-section {
+    .view-pane {
       display: none;
-      animation: fadeIn 0.25s ease;
+      animation: paneAppear 0.25s ease;
     }
 
-    .tab-section.active {
+    .view-pane.active-pane {
       display: block;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
+    @keyframes paneAppear {
+      from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
     /* ========================================================================
-       CARDS, INPUTS & BUTTONS
+       GLASS PANELS, INPUTS & ROYAL BUTTONS
        ======================================================================== */
-    .grid-2col {
+    .two-col-layout {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 18px;
       margin-bottom: 18px;
     }
 
-    .cyber-card {
+    .glass-panel {
       background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 20px;
+      border: 1px solid var(--border-glass);
+      border-radius: 22px;
       padding: 22px;
       margin-bottom: 18px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
     }
 
-    .card-header {
+    .panel-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 10px;
-      border-bottom: 1px solid rgba(0, 240, 255, 0.15);
       padding-bottom: 12px;
       margin-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    .card-title {
-      font-family: 'Orbitron', sans-serif;
+    .panel-heading {
       font-size: 15px;
-      font-weight: 700;
-      color: var(--primary);
-      letter-spacing: 1px;
+      font-weight: 800;
+      color: var(--accent-main);
+      letter-spacing: 0.6px;
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    .step-badge {
-      background: rgba(0, 240, 255, 0.14);
-      border: 1px solid var(--primary);
-      color: var(--primary);
-      font-family: 'Orbitron', sans-serif;
+    .badge-chip {
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid var(--accent-main);
+      color: var(--accent-main);
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
       font-size: 10px;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 6px;
+      font-weight: 800;
     }
 
-    .form-group {
+    .field-block {
       margin-bottom: 14px;
     }
 
-    .form-label {
+    .field-title {
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--text-secondary);
       margin-bottom: 6px;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.5px;
       text-transform: uppercase;
     }
 
-    .form-label span.req {
-      color: var(--primary);
+    .field-title span {
+      color: var(--accent-main);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
     }
 
-    .input-wrap {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-
-    .cyber-input {
+    .royal-input {
       width: 100%;
       padding: 13px 15px;
       background: var(--bg-input);
-      border: 1px solid rgba(0, 240, 255, 0.28);
-      border-radius: 12px;
-      color: var(--text-main);
+      border: 1.5px solid var(--border-glass);
+      border-radius: 14px;
+      color: #ffffff;
       font-family: 'JetBrains Mono', monospace;
       font-size: 14px;
       outline: none;
       transition: all 0.2s ease;
     }
 
-    .cyber-input:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 16px var(--primary-glow);
+    .royal-input:focus {
+      border-color: var(--accent-main);
+      box-shadow: 0 0 18px var(--accent-glow);
     }
 
-    .pwd-toggle-btn {
-      position: absolute;
-      right: 10px;
-      background: rgba(0, 240, 255, 0.1);
-      border: 1px solid var(--border-color);
-      color: var(--primary);
-      border-radius: 8px;
-      padding: 5px 10px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      cursor: pointer;
-    }
-
-    .cyber-btn {
+    .action-btn {
       width: 100%;
-      padding: 13px 18px;
+      padding: 14px 18px;
       border: none;
-      border-radius: 12px;
-      font-family: 'Orbitron', sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 1px;
+      border-radius: 14px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
       cursor: pointer;
       transition: all 0.2s ease;
       display: inline-flex;
@@ -734,476 +719,461 @@ function renderMasterWebPanel() {
       margin-bottom: 8px;
     }
 
-    .btn-cyan {
-      background: linear-gradient(90deg, #0284c7, var(--primary));
-      color: #020617;
-      box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+    .btn-gold {
+      background: var(--gradient-btn);
+      color: #05010d;
+      box-shadow: 0 0 22px var(--accent-glow);
     }
 
-    .btn-cyan:hover {
-      box-shadow: 0 0 30px var(--primary-glow);
+    .btn-gold:hover {
       transform: translateY(-2px);
+      box-shadow: 0 0 32px var(--accent-glow);
     }
 
-    .btn-green {
-      background: linear-gradient(90deg, #059669, #10b981);
+    .btn-emerald {
+      background: linear-gradient(90deg, #10b981, #059669);
       color: #ffffff;
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+      box-shadow: 0 0 22px var(--success-glow);
     }
 
-    .btn-green:hover {
-      box-shadow: 0 0 30px var(--success-glow);
+    .btn-emerald:hover {
       transform: translateY(-2px);
     }
 
-    .btn-red {
-      background: linear-gradient(90deg, #dc2626, #ef4444);
+    .btn-crimson {
+      background: linear-gradient(90deg, #f43f5e, #e11d48);
       color: #ffffff;
-      box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+      box-shadow: 0 0 22px var(--danger-glow);
     }
 
-    .btn-red:hover {
-      box-shadow: 0 0 30px var(--danger-glow);
-      transform: translateY(-2px);
-    }
-
-    .btn-purple {
-      background: linear-gradient(90deg, #6d28d9, #9333ea);
+    .btn-royal-purple {
+      background: linear-gradient(90deg, #8b5cf6, #ec4899);
       color: #ffffff;
-      box-shadow: 0 0 20px rgba(147, 51, 234, 0.25);
+      box-shadow: 0 0 22px var(--accent-sec-glow);
     }
 
-    .btn-purple:hover {
-      box-shadow: 0 0 30px var(--secondary-glow);
-      transform: translateY(-2px);
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-glass);
+      color: var(--accent-main);
     }
 
-    .btn-outline {
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid var(--primary);
-      color: var(--primary);
-    }
-
-    .btn-sm {
+    .btn-mini {
       width: auto;
       padding: 7px 13px;
       font-size: 11px;
       margin-bottom: 0;
+      border-radius: 10px;
     }
 
     /* ========================================================================
-       DATA TABLES
+       LIVE HOLOGRAPHIC CONSOLE
        ======================================================================== */
-    .table-responsive {
+    .console-screen {
+      background: #04010a;
+      border: 1.5px solid var(--border-strong);
+      border-radius: 16px;
+      padding: 15px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      color: #fde68a;
+      max-height: 250px;
+      overflow-y: auto;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.9);
+    }
+
+    .log-entry {
+      padding-left: 10px;
+      border-left: 3px solid var(--accent-main);
+      margin-bottom: 10px;
+    }
+
+    /* ========================================================================
+       TABLES & STATUS PILLS
+       ======================================================================== */
+    .table-scroll {
       width: 100%;
       overflow-x: auto;
     }
 
-    .cyber-table {
+    .royal-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
     }
 
-    .cyber-table th {
-      background: rgba(0, 240, 255, 0.08);
-      color: var(--primary);
-      font-family: 'Orbitron', sans-serif;
+    .royal-table th {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--accent-main);
+      font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       text-align: left;
       padding: 12px 14px;
-      border-bottom: 1px solid var(--border-color);
-      letter-spacing: 0.8px;
+      border-bottom: 1px solid var(--border-glass);
       white-space: nowrap;
     }
 
-    .cyber-table td {
+    .royal-table td {
       padding: 13px 14px;
-      border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
-      color: var(--text-main);
+      color: #ffffff;
       vertical-align: middle;
     }
 
-    .cyber-table tr:hover td {
-      background: rgba(0, 240, 255, 0.04);
-    }
-
-    .pill-joined {
-      background: rgba(16, 185, 129, 0.15);
+    .status-joined {
+      background: rgba(16, 185, 129, 0.18);
       border: 1px solid var(--success);
       color: #34d399;
       padding: 4px 10px;
       border-radius: 999px;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 800;
       display: inline-block;
     }
 
-    .pill-left {
-      background: rgba(239, 68, 68, 0.15);
+    .status-left {
+      background: rgba(244, 63, 94, 0.18);
       border: 1px solid var(--danger);
-      color: #f87171;
+      color: #fda4af;
       padding: 4px 10px;
       border-radius: 999px;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 800;
       display: inline-block;
     }
 
-    .pill-api {
-      background: rgba(0, 240, 255, 0.1);
-      border: 1px solid var(--border-color);
-      color: var(--primary);
+    .api-tag {
+      background: rgba(139, 92, 246, 0.2);
+      border: 1px solid #a78bfa;
+      color: #ddd6fe;
       padding: 3px 8px;
       border-radius: 6px;
       font-size: 11px;
-      display: inline-block;
     }
 
-    /* ========================================================================
-       LIVE CYBER TERMINAL LOG CONSOLE
-       ======================================================================== */
-    .terminal-box {
-      background: #02050c;
-      border: 1px solid var(--border-bright);
-      border-radius: 16px;
-      padding: 16px;
-      font-family: 'JetBrains Mono', monospace;
+    .helper-alert {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px dashed var(--accent-main);
+      border-radius: 14px;
+      padding: 12px 15px;
       font-size: 12.5px;
-      color: var(--primary);
-      max-height: 270px;
-      overflow-y: auto;
-      line-height: 1.65;
-      box-shadow: inset 0 0 25px rgba(0, 240, 255, 0.07);
-      white-space: pre-wrap;
-    }
-
-    .terminal-line {
-      margin-bottom: 10px;
-      border-left: 2px solid var(--primary);
-      padding-left: 10px;
-    }
-
-    #toast-container {
-      position: fixed;
-      bottom: 22px;
-      right: 22px;
-      z-index: 999999;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .cyber-toast {
-      background: rgba(8, 14, 28, 0.96);
-      border-left: 4px solid var(--primary);
-      border-top: 1px solid var(--border-color);
-      border-right: 1px solid var(--border-color);
-      border-bottom: 1px solid var(--border-color);
-      color: var(--text-main);
-      padding: 13px 18px;
-      border-radius: 12px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-      animation: slideIn 0.25s ease;
-      max-width: 340px;
-    }
-
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-
-    .info-banner {
-      background: rgba(0, 240, 255, 0.06);
-      border: 1px dashed var(--border-bright);
-      border-radius: 12px;
-      padding: 12px 14px;
-      font-size: 13px;
-      color: #cbd5e1;
+      color: var(--text-secondary);
       margin-bottom: 16px;
       line-height: 1.5;
     }
 
+    /* TOAST POPUP */
+    #toast-zone {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 100000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .royal-toast {
+      background: #140a29;
+      border-left: 4px solid var(--accent-main);
+      border-top: 1px solid var(--border-glass);
+      border-right: 1px solid var(--border-glass);
+      border-bottom: 1px solid var(--border-glass);
+      color: #ffffff;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8);
+    }
+
     @media (max-width: 640px) {
-      .brand-text h1 { font-size: 17px; }
-      .stat-value { font-size: 22px; }
-      .cyber-header { padding: 15px; }
+      .command-tabs {
+        grid-template-columns: 1fr;
+      }
+      .royal-title-block h1 {
+        font-size: 17px;
+      }
     }
   </style>
 </head>
 <body>
 
-  <!-- ANIMATED MATRIX / PARTICLE NETWORK CANVAS -->
-  <canvas id="cyber-canvas"></canvas>
+  <div class="quantum-grid-bg"></div>
 
   <!-- ======================================================================
-       1. SECURITY LOCK SCREEN MODAL (PASSWORD: 252010)
+       1. ROYAL QUANTUM VAULT LOCK SCREEN (PIN: 252010)
        ====================================================================== -->
-  <div id="security-lock-screen">
-    <div class="lock-card">
-      <div class="shield-icon">🔐</div>
-      <div class="lock-title">SECURITY CLEARANCE</div>
-      <div class="lock-subtitle">ENTER 6-DIGIT MASTER PIN TO UNLOCK PANEL</div>
+  <div id="vault-overlay">
+    <div class="vault-container">
+      <div class="vault-crown-badge">👑 QUANTUM SECURITY VAULT 👑</div>
+      <div class="vault-heading">MASTER ACCESS LOCK</div>
+      <div class="vault-subtext">Enter 6-Digit Security PIN to Unlock Control Deck</div>
 
-      <div class="pin-dots-container" id="pin-dots">
-        <div class="pin-dot"></div>
-        <div class="pin-dot"></div>
-        <div class="pin-dot"></div>
-        <div class="pin-dot"></div>
-        <div class="pin-dot"></div>
-        <div class="pin-dot"></div>
+      <!-- 6 LED DISPLAY BOXES -->
+      <div class="led-pin-boxes" id="led-boxes">
+        <div class="led-box" id="led-0">-</div>
+        <div class="led-box" id="led-1">-</div>
+        <div class="led-box" id="led-2">-</div>
+        <div class="led-box" id="led-3">-</div>
+        <div class="led-box" id="led-4">-</div>
+        <div class="led-box" id="led-5">-</div>
       </div>
 
-      <input
-        type="password"
-        id="pin-input"
-        class="pin-direct-input"
-        maxlength="6"
-        placeholder="••••••"
-        inputmode="numeric"
-        oninput="syncPinFromInput(this.value)"
-        onkeydown="if(event.key==='Enter') verifyMasterPin()"
-      />
-
-      <div class="numpad-grid">
-        <button class="num-btn" onclick="pressPinDigit('1')">1</button>
-        <button class="num-btn" onclick="pressPinDigit('2')">2</button>
-        <button class="num-btn" onclick="pressPinDigit('3')">3</button>
-        <button class="num-btn" onclick="pressPinDigit('4')">4</button>
-        <button class="num-btn" onclick="pressPinDigit('5')">5</button>
-        <button class="num-btn" onclick="pressPinDigit('6')">6</button>
-        <button class="num-btn" onclick="pressPinDigit('7')">7</button>
-        <button class="num-btn" onclick="pressPinDigit('8')">8</button>
-        <button class="num-btn" onclick="pressPinDigit('9')">9</button>
-        <button class="num-btn action-clear" onclick="clearPin()">CLR</button>
-        <button class="num-btn" onclick="pressPinDigit('0')">0</button>
-        <button class="num-btn action-enter" onclick="verifyMasterPin()">UNLOCK</button>
+      <!-- DIRECT INPUT + UNLOCK BUTTON (100% FALLBACK PROOF) -->
+      <div class="direct-pin-row">
+        <input
+          type="tel"
+          id="direct-pin-input"
+          class="direct-pin-field"
+          maxlength="6"
+          placeholder="Type PIN Here"
+          autocomplete="off"
+        />
+        <button type="button" class="direct-unlock-btn" id="btn-direct-unlock">UNLOCK ⚡</button>
       </div>
 
-      <div id="lock-status-msg">🛡️ PROTECTED BY KUMAR CYBER-FIREWALL V5.0</div>
+      <!-- 3D TACTILE KEYPAD -->
+      <div class="tactile-keypad">
+        <button type="button" class="key-tile" data-digit="1">1</button>
+        <button type="button" class="key-tile" data-digit="2">2</button>
+        <button type="button" class="key-tile" data-digit="3">3</button>
+        <button type="button" class="key-tile" data-digit="4">4</button>
+        <button type="button" class="key-tile" data-digit="5">5</button>
+        <button type="button" class="key-tile" data-digit="6">6</button>
+        <button type="button" class="key-tile" data-digit="7">7</button>
+        <button type="button" class="key-tile" data-digit="8">8</button>
+        <button type="button" class="key-tile" data-digit="9">9</button>
+        <button type="button" class="key-tile key-clr" id="btn-key-clr">CLEAR</button>
+        <button type="button" class="key-tile" data-digit="0">0</button>
+        <button type="button" class="key-tile key-ok" id="btn-key-enter">OPEN 🔓</button>
+      </div>
+
+      <div id="vault-feedback">🛡️ PROTECTED BY KUMAR ROYAL FIREWALL</div>
     </div>
   </div>
 
   <!-- ======================================================================
-       2. MAIN MASTER CONTROL PANEL DASHBOARD
+       2. MAIN ROYAL COMMAND CENTER DASHBOARD
        ====================================================================== -->
-  <div class="app-wrapper">
-    <!-- HEADER -->
-    <header class="cyber-header">
-      <div class="brand-zone">
-        <div class="brand-logo">⚡</div>
-        <div class="brand-text">
-          <h1>TELEGRAM CONTROL PANEL</h1>
-          <p>Per-Account API_ID & API_HASH • Multi-ID Auto Channel Manager</p>
+  <div class="master-shell">
+    <!-- TOP HEADER -->
+    <header class="royal-header">
+      <div class="royal-brand">
+        <div class="royal-emblem">👑</div>
+        <div class="royal-title-block">
+          <h1>TELEGRAM MASTER CONTROL PANEL</h1>
+          <p>Per-Account API_ID & API_HASH • Multi-Account Auto Join & Leave</p>
         </div>
       </div>
-      <div class="header-controls">
-        <select class="theme-selector" onchange="changeTheme(this.value)">
-          <option value="">🎨 THEME: CYBER CYAN</option>
-          <option value="theme-matrix">🟢 THEME: MATRIX GREEN</option>
-          <option value="theme-crimson">🔴 THEME: CRIMSON RED</option>
-          <option value="theme-gold">🟡 THEME: ROYAL GOLD</option>
+      <div class="header-actions">
+        <select class="theme-pill" id="theme-switcher">
+          <option value="">👑 ROYAL GOLD & PLASMA</option>
+          <option value="theme-emerald">🟢 EMERALD MATRIX</option>
+          <option value="theme-crimson">🔴 CRIMSON BLAZE</option>
+          <option value="theme-cyber">🔵 CYBER NEON BLUE</option>
         </select>
-        <div class="cyber-badge">
-          <span class="status-dot"></span>
-          <span>FIREBASE SYNC</span>
-        </div>
-        <div class="cyber-badge" id="live-clock">00:00:00</div>
-        <button class="btn-lock-now" onclick="lockPanelNow()">🔒 LOCK</button>
+        <div class="clock-pill" id="header-clock">🕒 00:00:00</div>
+        <button type="button" class="lock-btn-top" id="btn-lock-panel">🔒 LOCK VAULT</button>
       </div>
     </header>
 
-    <!-- TELEMETRY STATS -->
-    <section class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">📱 Connected Accounts</div>
-        <div class="stat-value" id="stat-accounts">0</div>
-        <div class="stat-sub">🟢 Each with Dedicated API_ID</div>
+    <!-- METRICS ROW -->
+    <section class="metrics-row">
+      <div class="metric-box">
+        <div class="metric-tag">📱 Connected IDs</div>
+        <div class="metric-num" id="metric-accounts">0</div>
+        <div class="metric-foot">🟢 Each with Dedicated API_ID</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">📢 Tracked Channels</div>
-        <div class="stat-value" id="stat-channels">0</div>
-        <div class="stat-sub">⚡ Synced in Realtime DB</div>
+      <div class="metric-box">
+        <div class="metric-tag">📢 Total Channels</div>
+        <div class="metric-num" id="metric-channels">0</div>
+        <div class="metric-foot">⚡ Synced in Firebase DB</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">🟢 Active Joined</div>
-        <div class="stat-value" id="stat-joined">0</div>
-        <div class="stat-sub">📥 Currently Participating</div>
+      <div class="metric-box">
+        <div class="metric-tag">🟢 Active Joined</div>
+        <div class="metric-num" id="metric-joined">0</div>
+        <div class="metric-foot">📥 Ready for Instant Control</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">🛡️ Security Status</div>
-        <div class="stat-value" style="color: var(--success); font-size: 20px;">ENCRYPTED</div>
-        <div class="stat-sub">🔑 PIN: 252010 VERIFIED</div>
+      <div class="metric-box">
+        <div class="metric-tag">🔐 Vault Security</div>
+        <div class="metric-num" style="color: var(--success); font-size: 22px;">UNLOCKED</div>
+        <div class="metric-foot">🔑 Master PIN Verified</div>
       </div>
     </section>
 
     <!-- NAVIGATION TABS -->
-    <nav class="tabs-bar">
-      <button class="tab-btn active" id="btn-tab-accounts" onclick="switchTab('tab-accounts', this)">➕ ADD / MANAGE IDs (WITH API)</button>
-      <button class="tab-btn" id="btn-tab-channels" onclick="switchTab('tab-channels', this)">📢 CHANNEL AUTO JOIN / LEAVE</button>
-      <button class="tab-btn" id="btn-tab-database" onclick="switchTab('tab-database', this)">📋 CHANNEL LIST</button>
-    </nav>
+    <div class="command-tabs">
+      <button type="button" class="cmd-tab active-tab" data-target="pane-accounts">
+        ➕ 1. ADD ID (WITH API_ID & HASH)
+      </button>
+      <button type="button" class="cmd-tab" data-target="pane-channels">
+        📥 2. JOIN / LEAVE CHANNEL
+      </button>
+      <button type="button" class="cmd-tab" data-target="pane-list">
+        📋 3. CHANNEL LIST & STATUS
+      </button>
+    </div>
 
     <!-- LIVE OUTPUT CONSOLE -->
-    <div class="cyber-card">
-      <div class="card-header">
-        <div class="card-title">🖥️ LIVE EXECUTION TERMINAL</div>
-        <div style="display:flex; gap:8px;">
-          <button class="cyber-btn btn-outline btn-sm" onclick="clearTerminal()">🧹 CLEAR LOG</button>
-          <button class="cyber-btn btn-outline btn-sm" onclick="refreshDashboardData()">🔄 REFRESH DATA</button>
+    <div class="glass-panel">
+      <div class="panel-top">
+        <div class="panel-heading">🖥️ LIVE COMMAND OUTPUT CONSOLE</div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="action-btn btn-ghost btn-mini" id="btn-clear-log">🧹 CLEAR</button>
+          <button type="button" class="action-btn btn-ghost btn-mini" id="btn-sync-now">🔄 REFRESH</button>
         </div>
       </div>
-      <div class="terminal-box" id="terminal-output">⚡ [SYSTEM READY]: Per-Account API_ID & API_HASH Engine loaded. 2FA verification fixed!</div>
+      <div class="console-screen" id="console-box">👑 [QUANTUM OS ONLINE]: Vault unlocked! Enter each account's API_ID, API_HASH, and Phone Number below.</div>
     </div>
 
     <!-- ====================================================================
-         TAB 1: ADD & MANAGE 11+ TELEGRAM ACCOUNTS (EACH WITH OWN API_ID/HASH)
+         PANE 1: ADD TELEGRAM ID (PER-ACCOUNT API_ID + API_HASH + OTP + 2FA)
          ==================================================================== -->
-    <div id="tab-accounts" class="tab-section active">
-      <div class="info-banner">
-        💡 <b>MULTI-API SYSTEM ACTIVE:</b> Every Telegram account has its own unique <code>API_ID</code> and <code>API_HASH</code> from <code>my.telegram.org</code>. Enter the account's specific API ID, API Hash, and Phone Number below to connect it!
+    <div id="pane-accounts" class="view-pane active-pane">
+      <div class="helper-alert">
+        ⚡ <b>DEDICATED API_ID & API_HASH SYSTEM:</b> Every Telegram account has its own <code>API_ID</code> and <code>API_HASH</code>. Enter the account's API ID, API Hash, and Phone Number below. They will be permanently saved with that account in Firebase!
       </div>
 
-      <div class="grid-2col">
-        <!-- STEP 1 & 2: API_ID + API_HASH + PHONE + OTP -->
-        <div class="cyber-card">
-          <div class="card-header">
-            <div class="card-title">➕ CONNECT TELEGRAM ACCOUNT</div>
-            <span class="step-badge">PER-ID API CONFIG</span>
+      <div class="two-col-layout">
+        <!-- LEFT CARD: API_ID + API_HASH + PHONE + OTP -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">➕ ADD TELEGRAM ACCOUNT</div>
+            <span class="badge-chip">STEP 1 & 2</span>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">
-              <span>1. ACCOUNT APP API_ID</span>
-              <span class="req">*REQUIRED</span>
-            </label>
+          <div class="field-block">
+            <div class="field-title">
+              <label>1. ACCOUNT APP API_ID</label>
+              <span>*REQUIRED</span>
+            </div>
             <input
-              type="text"
-              id="login-api-id"
-              class="cyber-input"
-              inputmode="numeric"
-              placeholder="Enter this account's API_ID (e.g. 35204350)"
+              type="tel"
+              id="inp-api-id"
+              class="royal-input"
+              placeholder="Enter Account API_ID (e.g. 35204350)"
             />
           </div>
 
-          <div class="form-group">
-            <label class="form-label">
-              <span>2. ACCOUNT APP API_HASH</span>
-              <span class="req">*REQUIRED</span>
-            </label>
+          <div class="field-block">
+            <div class="field-title">
+              <label>2. ACCOUNT APP API_HASH</label>
+              <span>*REQUIRED</span>
+            </div>
             <input
               type="text"
-              id="login-api-hash"
-              class="cyber-input"
+              id="inp-api-hash"
+              class="royal-input"
               placeholder="Enter 32-char API_HASH (e.g. 94b55923094...)"
             />
           </div>
 
-          <div class="form-group">
-            <label class="form-label">
-              <span>3. PHONE NUMBER (WITH COUNTRY CODE)</span>
-              <span class="req">*REQUIRED</span>
-            </label>
+          <div class="field-block">
+            <div class="field-title">
+              <label>3. PHONE NUMBER (WITH +91)</label>
+              <span>*REQUIRED</span>
+            </div>
             <input
-              type="text"
-              id="login-phone"
-              class="cyber-input"
+              type="tel"
+              id="inp-phone"
+              class="royal-input"
               placeholder="e.g. +919584967727"
             />
           </div>
 
-          <button class="cyber-btn btn-cyan" onclick="triggerSendOtp()">
-            📩 STEP 1: SEND LOGIN OTP CODE
+          <button type="button" class="action-btn btn-gold" id="btn-send-otp">
+            📩 STEP 1: SEND OTP CODE TO ACCOUNT
           </button>
 
-          <hr style="border: none; border-top: 1px solid rgba(0,240,255,0.15); margin: 16px 0;" />
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 16px 0;" />
 
-          <div class="form-group">
-            <label class="form-label">
-              <span>4. ENTER 5-DIGIT TELEGRAM OTP</span>
-              <span class="req">FROM TELEGRAM APP</span>
-            </label>
+          <div class="field-block">
+            <div class="field-title">
+              <label>4. ENTER 5-DIGIT TELEGRAM OTP</label>
+              <span>NO OTP BLOCK</span>
+            </div>
             <input
-              type="text"
-              id="login-otp"
-              class="cyber-input"
-              inputmode="numeric"
-              placeholder="Enter 5-digit OTP (e.g. 58765)"
+              type="tel"
+              id="inp-otp"
+              class="royal-input"
+              placeholder="Enter 5-Digit OTP (e.g. 58765)"
             />
           </div>
 
-          <button class="cyber-btn btn-green" onclick="triggerVerifyOtp()">
-            ✅ STEP 2: VERIFY OTP & SAVE ACCOUNT
+          <button type="button" class="action-btn btn-emerald" id="btn-verify-otp">
+            ✅ STEP 2: VERIFY OTP & CONNECT ID
           </button>
         </div>
 
-        <!-- STEP 3: 2FA CLOUD PASSWORD (FIXED) -->
-        <div class="cyber-card">
-          <div class="card-header">
-            <div class="card-title">🔐 TWO-STEP VERIFICATION (2FA)</div>
-            <span class="step-badge">100% FIXED</span>
+        <!-- RIGHT CARD: 2FA CLOUD PASSWORD -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">🔐 2FA CLOUD PASSWORD</div>
+            <span class="badge-chip">100% FIXED</span>
           </div>
 
-          <div class="info-banner" style="border-color: var(--secondary);">
-            🛡️ If your account shows <b>2FA PASSWORD REQUIRED</b> after entering the OTP, type your Telegram Cloud Password below and click Verify. It will automatically save your account with its dedicated <code>API_ID</code> & <code>API_HASH</code>!
+          <div class="helper-alert" style="border-color: var(--accent-sec);">
+            🛡️ If your account asks for a <b>Two-Step Verification (2FA) Password</b> after verifying the OTP, enter your Cloud Password below and click Verify!
           </div>
 
-          <div class="form-group">
-            <label class="form-label">
-              <span>TELEGRAM 2FA CLOUD PASSWORD</span>
-              <span class="req">IF ENABLED</span>
-            </label>
-            <div class="input-wrap">
-              <input
-                type="password"
-                id="login-2fa"
-                class="cyber-input"
-                placeholder="Enter your 2FA Cloud Password"
-              />
-              <button type="button" class="pwd-toggle-btn" onclick="toggle2faVisibility()">SHOW</button>
+          <div class="field-block">
+            <div class="field-title">
+              <label>TELEGRAM 2FA CLOUD PASSWORD</label>
+              <span>IF ENABLED</span>
             </div>
+            <input
+              type="text"
+              id="inp-2fa"
+              class="royal-input"
+              placeholder="Enter 2FA Cloud Password"
+            />
           </div>
 
-          <button class="cyber-btn btn-purple" onclick="triggerVerify2FA()">
-            🔐 STEP 3: VERIFY 2FA PASSWORD & SAVE ID
+          <button type="button" class="action-btn btn-royal-purple" id="btn-verify-2fa">
+            🔐 STEP 3: VERIFY 2FA & SAVE ACCOUNT
           </button>
 
-          <hr style="border: none; border-top: 1px solid rgba(0,240,255,0.15); margin: 18px 0;" />
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 18px 0;" />
 
-          <div class="card-title" style="font-size: 13px; margin-bottom: 10px;">⚡ CURRENT PENDING LOGIN SESSION</div>
-          <div id="pending-session-box" style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted); background:var(--bg-input); padding:12px; border-radius:10px; border:1px solid var(--border-color);">
-            No active OTP session in progress. Fill Steps 1-3 on the left to start!
+          <div class="panel-heading" style="font-size: 13px; margin-bottom: 10px;">
+            📡 ACTIVE LOGIN SESSION TRACKER
+          </div>
+          <div
+            id="active-session-banner"
+            style="background: var(--bg-input); border: 1px solid var(--border-glass); border-radius: 14px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-secondary);"
+          >
+            No pending OTP session. Enter API_ID, API_HASH, and Phone on the left to start!
           </div>
         </div>
       </div>
 
       <!-- CONNECTED ACCOUNTS TABLE -->
-      <div class="cyber-card">
-        <div class="card-header">
-          <div class="card-title">📱 CONNECTED TELEGRAM ACCOUNTS & DEDICATED APIs</div>
-          <button class="cyber-btn btn-outline btn-sm" onclick="refreshDashboardData()">🔄 SYNC ACCOUNTS</button>
+      <div class="glass-panel">
+        <div class="panel-top">
+          <div class="panel-heading">📱 CONNECTED TELEGRAM ACCOUNTS (11+ IDs HUB)</div>
         </div>
-        <div class="table-responsive">
-          <table class="cyber-table">
+        <div class="table-scroll">
+          <table class="royal-table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>ACCOUNT NAME</th>
+                <th>NAME</th>
                 <th>USERNAME</th>
-                <th>PHONE NUMBER</th>
+                <th>PHONE</th>
                 <th>DEDICATED API_ID</th>
                 <th>DEDICATED API_HASH</th>
                 <th>ADDED ON</th>
                 <th>ACTION</th>
               </tr>
             </thead>
-            <tbody id="accounts-table-body">
+            <tbody id="tbody-accounts">
               <tr>
-                <td colspan="8" style="text-align: center; color: var(--text-muted);">Loading connected accounts...</td>
+                <td colspan="8" style="text-align: center; color: var(--text-dim);">Loading accounts...</td>
               </tr>
             </tbody>
           </table>
@@ -1212,72 +1182,95 @@ function renderMasterWebPanel() {
     </div>
 
     <!-- ====================================================================
-         TAB 2: CHANNEL AUTO JOIN & AUTO LEAVE
+         PANE 2: AUTO JOIN & AUTO LEAVE CHANNELS
          ==================================================================== -->
-    <div id="tab-channels" class="tab-section">
-      <div class="grid-2col">
-        <!-- AUTO JOIN CARD -->
-        <div class="cyber-card">
-          <div class="card-header">
-            <div class="card-title">📥 AUTO JOIN CHANNEL (ALL IDs)</div>
-            <span class="step-badge">MULTI-API ENGINE</span>
+    <div id="pane-channels" class="view-pane">
+      <div class="two-col-layout">
+        <!-- JOIN CHANNEL CARD -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📥 JOIN CHANNEL (AUTOMATIC)</div>
+            <span class="badge-chip">ALL IDs</span>
           </div>
-          <div class="form-group">
-            <label class="form-label">CHANNEL @USERNAME OR PRIVATE INVITE LINK</label>
+          <div class="field-block">
+            <div class="field-title">
+              <label>CHANNEL LINK OR @USERNAME</label>
+              <span>PUBLIC / PRIVATE</span>
+            </div>
             <input
               type="text"
-              id="join-channel-input"
-              class="cyber-input"
-              placeholder="e.g. @mychannel or https://t.me/+AbCdEfGh"
+              id="inp-join-channel"
+              class="royal-input"
+              placeholder="e.g. @mychannel or https://t.me/+AbCdEfG"
             />
           </div>
-          <button class="cyber-btn btn-green" onclick="triggerJoinChannel()">
-            📥 AUTO JOIN FROM ALL CONNECTED ACCOUNTS
+          <button type="button" class="action-btn btn-emerald" id="btn-join-channel">
+            📥 AUTO JOIN CHANNEL FROM ALL IDs
           </button>
-          <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
-            ⚡ Each account will use its own saved <code>API_ID</code> and <code>API_HASH</code> to join automatically!
+          <p style="font-size: 12px; color: var(--text-dim); margin-top: 6px;">
+            ⚡ Every connected account will automatically join this channel using its own saved <code>API_ID</code> & <code>API_HASH</code>.
           </p>
         </div>
 
-        <!-- AUTO LEAVE CARD -->
-        <div class="cyber-card">
-          <div class="card-header">
-            <div class="card-title">📤 AUTO LEAVE CHANNEL (ALL IDs)</div>
-            <span class="step-badge">INSTANT LEAVE</span>
+        <!-- LEAVE CHANNEL CARD -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📤 LEAVE CHANNEL (AUTOMATIC)</div>
+            <span class="badge-chip">ALL IDs</span>
           </div>
-          <div class="form-group">
-            <label class="form-label">ENTER CHANNEL NUMBER FROM LIST (OR USE 1-CLICK BELOW)</label>
+          <div class="field-block">
+            <div class="field-title">
+              <label>CHANNEL NUMBER FROM LIST</label>
+              <span>OR 1-CLICK BELOW</span>
+            </div>
             <input
               type="number"
-              id="leave-channel-number"
-              class="cyber-input"
-              placeholder="Enter Channel # (e.g. 1, 2, 3)"
+              id="inp-leave-number"
+              class="royal-input"
+              placeholder="Enter Channel Number (e.g. 1, 2)"
             />
           </div>
-          <button class="cyber-btn btn-red" onclick="triggerLeaveByNumber()">
+          <button type="button" class="action-btn btn-crimson" id="btn-leave-number">
             📤 AUTO LEAVE SELECTED CHANNEL (ALL IDs)
           </button>
-          <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
-            💡 You can also click the red <b>LEAVE ALL IDs</b> button directly on any channel row below!
+          <p style="font-size: 12px; color: var(--text-dim); margin-top: 6px;">
+            💡 You can also click the red <b>📤 LEAVE ALL IDs</b> button on any channel in the table below!
           </p>
         </div>
       </div>
 
-      <!-- QUICK INTERACTIVE CHANNEL TABLE -->
-      <div class="cyber-card">
-        <div class="card-header">
-          <div class="card-title">📋 REGISTERED CHANNELS & 1-CLICK AUTO LEAVE</div>
-          <input
-            type="text"
-            id="channel-search"
-            class="cyber-input"
-            style="max-width: 240px; padding: 8px 12px; font-size: 12px;"
-            placeholder="🔍 Search channel..."
-            oninput="renderChannelsTable()"
-          />
+      <!-- INTERACTIVE CHANNEL LIST -->
+      <div class="glass-panel">
+        <div class="panel-top">
+          <div class="panel-heading">📋 REGISTERED CHANNELS & 1-CLICK LEAVE</div>
         </div>
-        <div class="table-responsive">
-          <table class="cyber-table">
+        <div class="table-scroll">
+          <table class="royal-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>CHANNEL TITLE</th>
+                <th>CHANNEL LINK / USERNAME</th>
+                <th>CURRENT STATUS</th>
+                <th>INSTANT ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-channels-main"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         PANE 3: COMPLETE CHANNEL LIST & STATUS
+         ==================================================================== -->
+    <div id="pane-list" class="view-pane">
+      <div class="glass-panel">
+        <div class="panel-top">
+          <div class="panel-heading">📋 REGISTERED CHANNELS & LIVE STATUS</div>
+        </div>
+        <div class="table-scroll">
+          <table class="royal-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -1287,511 +1280,500 @@ function renderMasterWebPanel() {
                 <th>ACTION</th>
               </tr>
             </thead>
-            <tbody id="channels-table-body">
-              <tr>
-                <td colspan="5" style="text-align: center; color: var(--text-muted);">Loading channels from Firebase...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ====================================================================
-         TAB 3: FULL CHANNEL DATABASE
-         ==================================================================== -->
-    <div id="tab-database" class="tab-section">
-      <div class="cyber-card">
-        <div class="card-header">
-          <div class="card-title">📋 COMPLETE CHANNEL HISTORY & STATUS</div>
-          <button class="cyber-btn btn-outline btn-sm" onclick="callBackend('list', {})">🔄 SYNC LIST</button>
-        </div>
-        <div class="table-responsive">
-          <table class="cyber-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>CHANNEL NAME</th>
-                <th>INVITE LINK / ID</th>
-                <th>CURRENT STATUS</th>
-                <th>QUICK ACTION</th>
-              </tr>
-            </thead>
-            <tbody id="database-table-body"></tbody>
+            <tbody id="tbody-channels-full"></tbody>
           </table>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- TOAST CONTAINER -->
-  <div id="toast-container"></div>
+  <div id="toast-zone"></div>
 
   <!-- ======================================================================
-       3. FRONTEND JAVASCRIPT ENGINE
+       3. BULLETPROOF FRONTEND JAVASCRIPT (ZERO ESCAPING BUGS)
        ====================================================================== -->
   <script>
-    var REQUIRED_PIN = "252010";
-    var currentPin = "";
-    var cachedAccounts = [];
-    var cachedChannels = [];
+    (function () {
+      var MASTER_PIN_CODE = "252010";
+      var enteredPin = "";
+      var accountsList = [];
+      var channelsList = [];
 
-    // SOUND SYNTHESIZER
-    var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    var audioCtx = AudioContextClass ? new AudioContextClass() : null;
+      // Web Audio Synthesizer for Tactile Feedback
+      var AudioCtx = window.AudioContext || window.webkitAudioContext;
+      var soundCtx = AudioCtx ? new AudioCtx() : null;
 
-    function playTone(freq, type, duration) {
-      try {
-        if (!audioCtx) return;
-        if (audioCtx.state === "suspended") audioCtx.resume();
-        var osc = audioCtx.createOscillator();
-        var gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
-      } catch (e) {}
-    }
-
-    function changeTheme(themeName) {
-      document.body.className = themeName;
-      showToast("🎨 Theme Updated!", "#00f0ff");
-    }
-
-    function toggle2faVisibility() {
-      var inp = document.getElementById("login-2fa");
-      var btn = document.querySelector(".pwd-toggle-btn");
-      if (inp.type === "password") {
-        inp.type = "text";
-        btn.textContent = "HIDE";
-      } else {
-        inp.type = "password";
-        btn.textContent = "SHOW";
+      function beep(freq, type, dur) {
+        try {
+          if (!soundCtx) return;
+          if (soundCtx.state === "suspended") soundCtx.resume();
+          var o = soundCtx.createOscillator();
+          var g = soundCtx.createGain();
+          o.type = type || "sine";
+          o.frequency.setValueAtTime(freq || 600, soundCtx.currentTime);
+          g.gain.setValueAtTime(0.07, soundCtx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, soundCtx.currentTime + (dur || 0.08));
+          o.connect(g);
+          g.connect(soundCtx.destination);
+          o.start();
+          o.stop(soundCtx.currentTime + (dur || 0.08));
+        } catch (e) {}
       }
-    }
 
-    function showToast(msg, border) {
-      var container = document.getElementById("toast-container");
-      var toast = document.createElement("div");
-      toast.className = "cyber-toast";
-      toast.style.borderLeftColor = border || "#00f0ff";
-      toast.innerHTML = msg;
-      container.appendChild(toast);
-      setTimeout(function () {
-        toast.remove();
-      }, 4000);
-    }
+      function toast(text, color) {
+        var zone = document.getElementById("toast-zone");
+        if (!zone) return;
+        var item = document.createElement("div");
+        item.className = "royal-toast";
+        item.style.borderLeftColor = color || "#f59e0b";
+        item.innerHTML = text;
+        zone.appendChild(item);
+        setTimeout(function () {
+          if (item.parentNode) item.parentNode.removeChild(item);
+        }, 3800);
+      }
 
-    function logToTerminal(htmlContent) {
-      var term = document.getElementById("terminal-output");
-      var time = new Date().toLocaleTimeString();
-      term.innerHTML =
-        '<div class="terminal-line"><span style="color:#94a3b8;">[' +
-        time +
-        "]</span>\\n" +
-        htmlContent +
-        "</div>" +
-        term.innerHTML;
-    }
+      function writeConsole(msgHtml) {
+        var box = document.getElementById("console-box");
+        if (!box) return;
+        var now = new Date().toLocaleTimeString();
+        box.innerHTML =
+          '<div class="log-entry"><span style="color:#94a3b8;">[' +
+          now +
+          "]</span>\n" +
+          msgHtml +
+          "</div>" +
+          box.innerHTML;
+      }
 
-    function clearTerminal() {
-      document.getElementById("terminal-output").innerHTML = "⚡ [TERMINAL CLEARED]: Ready for commands...";
-    }
+      // ====================================================================
+      // VAULT LOCK SCREEN LOGIC (PIN: 252010)
+      // ====================================================================
+      function renderLedBoxes() {
+        for (var i = 0; i < 6; i++) {
+          var box = document.getElementById("led-" + i);
+          if (!box) continue;
+          box.classList.remove("error-shake");
+          if (i < enteredPin.length) {
+            box.textContent = "★";
+            box.classList.add("active-digit");
+          } else {
+            box.textContent = "-";
+            box.classList.remove("active-digit");
+          }
+        }
+        var directInp = document.getElementById("direct-pin-input");
+        if (directInp && directInp.value !== enteredPin) {
+          directInp.value = enteredPin;
+        }
+      }
 
-    // ======================================================================
-    // SECURITY LOCK CONTROLLER (PIN: 252010)
-    // ======================================================================
-    function updatePinDots() {
-      var dots = document.querySelectorAll("#pin-dots .pin-dot");
-      for (var i = 0; i < dots.length; i++) {
-        dots[i].classList.remove("error");
-        if (i < currentPin.length) {
-          dots[i].classList.add("filled");
+      function unlockVaultNow() {
+        beep(920, "triangle", 0.15);
+        setTimeout(function () {
+          beep(1320, "triangle", 0.22);
+        }, 110);
+        try {
+          sessionStorage.setItem("kumar_vault_unlocked", "yes");
+        } catch (e) {}
+        var overlay = document.getElementById("vault-overlay");
+        if (overlay) overlay.classList.add("vault-open");
+        toast("🔓 VAULT UNLOCKED! Welcome Kumar.", "#10b981");
+        loadDashboardState(true);
+      }
+
+      function checkPinNow() {
+        var directInp = document.getElementById("direct-pin-input");
+        var candidate = enteredPin || (directInp ? directInp.value.trim() : "");
+        if (candidate === MASTER_PIN_CODE) {
+          unlockVaultNow();
         } else {
-          dots[i].classList.remove("filled");
+          beep(190, "sawtooth", 0.28);
+          var fb = document.getElementById("vault-feedback");
+          if (fb) {
+            fb.innerHTML = '<span style="color:#f43f5e;">❌ INVALID PIN! ENTER 252010 TO UNLOCK!</span>';
+          }
+          for (var i = 0; i < 6; i++) {
+            var box = document.getElementById("led-" + i);
+            if (box) box.classList.add("error-shake");
+          }
+          toast("❌ Wrong Password! Access Denied.", "#f43f5e");
+          setTimeout(function () {
+            enteredPin = "";
+            if (directInp) directInp.value = "";
+            renderLedBoxes();
+          }, 480);
         }
       }
-      document.getElementById("pin-input").value = currentPin;
-    }
 
-    function pressPinDigit(digit) {
-      playTone(680, "sine", 0.07);
-      if (currentPin.length < 6) {
-        currentPin += digit;
-        updatePinDots();
-        if (currentPin.length === 6) {
-          setTimeout(verifyMasterPin, 120);
-        }
-      }
-    }
-
-    function syncPinFromInput(val) {
-      currentPin = String(val).replace(/\\D/g, "").slice(0, 6);
-      updatePinDots();
-      if (currentPin.length === 6) {
-        verifyMasterPin();
-      }
-    }
-
-    function clearPin() {
-      playTone(300, "sawtooth", 0.1);
-      currentPin = "";
-      updatePinDots();
-      document.getElementById("lock-status-msg").innerHTML = "🛡️ ENTER 6-DIGIT MASTER PIN";
-    }
-
-    function verifyMasterPin() {
-      if (currentPin === REQUIRED_PIN) {
-        playTone(880, "triangle", 0.15);
-        setTimeout(function () {
-          playTone(1200, "triangle", 0.22);
-        }, 120);
-        sessionStorage.setItem("kumar_panel_unlocked", "true");
-        document.getElementById("security-lock-screen").classList.add("unlocked");
-        showToast("🔓 ACCESS GRANTED! Welcome Kumar.", "#10b981");
-        refreshDashboardData();
-      } else {
-        playTone(180, "sawtooth", 0.3);
-        var dots = document.querySelectorAll("#pin-dots .pin-dot");
-        for (var i = 0; i < dots.length; i++) {
-          dots[i].classList.add("error");
-        }
-        document.getElementById("lock-status-msg").innerHTML =
-          '<span style="color:#ef4444;">❌ ACCESS DENIED! INVALID MASTER PIN!</span>';
-        showToast("❌ Invalid Password! Access Denied.", "#ef4444");
-        setTimeout(function () {
-          currentPin = "";
-          updatePinDots();
-        }, 500);
-      }
-    }
-
-    function lockPanelNow() {
-      playTone(260, "sine", 0.18);
-      sessionStorage.removeItem("kumar_panel_unlocked");
-      currentPin = "";
-      updatePinDots();
-      document.getElementById("security-lock-screen").classList.remove("unlocked");
-      showToast("🔒 Control Panel Locked.", "#f59e0b");
-    }
-
-    window.addEventListener("DOMContentLoaded", function () {
-      if (sessionStorage.getItem("kumar_panel_unlocked") === "true") {
-        currentPin = REQUIRED_PIN;
-        document.getElementById("security-lock-screen").classList.add("unlocked");
-        refreshDashboardData();
-      }
-    });
-
-    // ======================================================================
-    // TAB SWITCHER & CLOCK
-    // ======================================================================
-    function switchTab(tabId, btnEl) {
-      playTone(540, "sine", 0.06);
-      var sections = document.querySelectorAll(".tab-section");
-      for (var i = 0; i < sections.length; i++) {
-        sections[i].classList.remove("active");
-      }
-      var btns = document.querySelectorAll(".tab-btn");
-      for (var j = 0; j < btns.length; j++) {
-        btns[j].classList.remove("active");
-      }
-      document.getElementById(tabId).classList.add("active");
-      if (btnEl) btnEl.classList.add("active");
-    }
-
-    setInterval(function () {
-      var el = document.getElementById("live-clock");
-      if (el) el.textContent = "🕒 " + new Date().toLocaleTimeString();
-    }, 1000);
-
-    // ======================================================================
-    // BACKEND API COMMUNICATOR
-    // ======================================================================
-    async function callBackend(action, payload) {
-      payload = payload || {};
-      logToTerminal("⏳ <b>Executing [" + action.toUpperCase() + "]... Please wait...</b>");
-      try {
-        var bodyObj = {
-          action: action,
-          webPin: REQUIRED_PIN
-        };
-        for (var k in payload) {
-          bodyObj[k] = payload[k];
-        }
-
-        var res = await fetch("/api/panel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(bodyObj)
-        });
-        var data = await res.json();
-        if (data.reply) {
-          logToTerminal(data.reply);
-        }
-        if (data.pendingPhone) {
-          document.getElementById("pending-session-box").innerHTML =
-            "🟢 <b>Active Session Phone:</b> <code>" +
-            data.pendingPhone +
-            "</code><br>🔢 <b>API_ID:</b> <code>" +
-            (data.pendingApiId || "Set") +
-            "</code>";
-        }
-        refreshDashboardData(true);
-        return data;
-      } catch (err) {
-        logToTerminal("❌ <b>Network Error:</b> " + err.message);
-        showToast("❌ Request Failed: " + err.message, "#ef4444");
-      }
-    }
-
-    async function refreshDashboardData(silent) {
-      try {
-        var res = await fetch("/api/panel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "dashboard_stats", webPin: REQUIRED_PIN })
-        });
-        var data = await res.json();
-        if (data.accounts || data.channels) {
-          updateTablesAndStats(data.accounts || [], data.channels || [], data.pendingAuth || null);
-          if (!silent) showToast("⚡ Synced with Firebase Realtime DB", "#00f0ff");
-        }
-      } catch (e) {}
-    }
-
-    function updateTablesAndStats(accounts, channels, pendingAuth) {
-      cachedAccounts = Array.isArray(accounts) ? accounts : [];
-      cachedChannels = Array.isArray(channels) ? channels : [];
-
-      document.getElementById("stat-accounts").textContent = cachedAccounts.length;
-      document.getElementById("stat-channels").textContent = cachedChannels.length;
-
-      var activeJoined = 0;
-      for (var i = 0; i < cachedChannels.length; i++) {
-        if (cachedChannels[i] && String(cachedChannels[i].status).indexOf("🟢") !== -1) {
-          activeJoined++;
-        }
-      }
-      document.getElementById("stat-joined").textContent = activeJoined;
-
-      var pendingBox = document.getElementById("pending-session-box");
-      if (pendingAuth && pendingAuth.phone) {
-        pendingBox.innerHTML =
-          "🟢 <b>Waiting Verification For:</b> <code>" +
-          pendingAuth.phone +
-          "</code><br>🔢 <b>Account API_ID:</b> <code>" +
-          pendingAuth.apiId +
-          "</code>";
-      } else {
-        pendingBox.innerHTML = "No active OTP session in progress. Fill Steps 1-3 on the left to start!";
-      }
-
-      renderAccountsTable();
-      renderChannelsTable();
-    }
-
-    function renderAccountsTable() {
-      var tbody = document.getElementById("accounts-table-body");
-      if (!cachedAccounts.length) {
-        tbody.innerHTML =
-          '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">📭 No Telegram accounts connected yet. Enter API_ID, API_HASH & Phone above!</td></tr>';
-        return;
-      }
-      var html = "";
-      for (var i = 0; i < cachedAccounts.length; i++) {
-        var acc = cachedAccounts[i];
-        var shortHash = acc.apiHash ? String(acc.apiHash).substring(0, 8) + "••••" : "Default";
-        html +=
-          "<tr>" +
-          "<td><b>#" + (i + 1) + "</b></td>" +
-          "<td><b>" + (acc.name || "User") + "</b></td>" +
-          "<td>@" + (acc.username || "None") + "</td>" +
-          "<td><code>" + acc.phone + "</code></td>" +
-          '<td><span class="pill-api">' + (acc.apiId || "Default") + "</span></td>" +
-          "<td><code>" + shortHash + "</code></td>" +
-          "<td>" + (acc.addedOn || "Active") + "</td>" +
-          "<td>" +
-          '<button class="cyber-btn btn-red btn-sm" onclick="removeAccount(\'' + acc.phone + '\')">🗑️ REMOVE</button>' +
-          "</td>" +
-          "</tr>";
-      }
-      tbody.innerHTML = html;
-    }
-
-    function renderChannelsTable() {
-      var searchEl = document.getElementById("channel-search");
-      var q = searchEl ? searchEl.value.toLowerCase() : "";
-      var tbody1 = document.getElementById("channels-table-body");
-      var tbody2 = document.getElementById("database-table-body");
-
-      if (!cachedChannels.length) {
-        var emptyRow =
-          '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">📭 No channels registered in Firebase yet.</td></tr>';
-        tbody1.innerHTML = emptyRow;
-        tbody2.innerHTML = emptyRow;
-        return;
-      }
-
-      var html = "";
-      for (var i = 0; i < cachedChannels.length; i++) {
-        var ch = cachedChannels[i];
-        var num = i + 1;
-        var titleStr = String(ch.title || ch.input);
-        var inputStr = String(ch.input || "");
-        if (q && titleStr.toLowerCase().indexOf(q) === -1 && inputStr.toLowerCase().indexOf(q) === -1) {
-          continue;
-        }
-        var isJoined = String(ch.status).indexOf("🟢") !== -1;
-        var badgeClass = isJoined ? "pill-joined" : "pill-left";
-
-        html +=
-          "<tr>" +
-          "<td><b>[" + num + "]</b></td>" +
-          "<td><b>" + titleStr + "</b></td>" +
-          "<td><code>" + inputStr + "</code></td>" +
-          '<td><span class="' + badgeClass + '">' + ch.status + "</span></td>" +
-          '<td style="display:flex;gap:6px;flex-wrap:wrap;">' +
-          '<button class="cyber-btn btn-red btn-sm" onclick="leaveChannelDirect(' + num + ')">📤 LEAVE ALL IDs</button>' +
-          '<button class="cyber-btn btn-outline btn-sm" onclick="rejoinChannelDirect(\'' + inputStr.replace(/'/g, "") + '\')">📥 RE-JOIN</button>' +
-          "</td>" +
-          "</tr>";
-      }
-
-      tbody1.innerHTML = html;
-      tbody2.innerHTML = html;
-    }
-
-    // ======================================================================
-    // ACTION HANDLERS (WITH PER-ACCOUNT API_ID & API_HASH)
-    // ======================================================================
-    function triggerSendOtp() {
-      var apiId = document.getElementById("login-api-id").value.trim();
-      var apiHash = document.getElementById("login-api-hash").value.trim();
-      var phone = document.getElementById("login-phone").value.trim();
-
-      if (!apiId || !apiHash) {
-        showToast("⚠️ Please enter both Account API_ID & API_HASH!", "#f59e0b");
-        return;
-      }
-      if (!phone) {
-        showToast("⚠️ Please enter the Phone Number (+91...)!", "#f59e0b");
-        return;
-      }
-
-      callBackend("send_code", {
-        apiId: apiId,
-        apiHash: apiHash,
-        input: phone
-      });
-    }
-
-    function triggerVerifyOtp() {
-      var otp = document.getElementById("login-otp").value.trim();
-      if (!otp) {
-        showToast("⚠️ Enter the 5-digit OTP!", "#f59e0b");
-        return;
-      }
-      callBackend("verify_code", { input: otp });
-    }
-
-    function triggerVerify2FA() {
-      var pwd = document.getElementById("login-2fa").value.trim();
-      if (!pwd) {
-        showToast("⚠️ Enter your 2FA Cloud Password!", "#f59e0b");
-        return;
-      }
-      callBackend("verify_2fa", { input: pwd });
-    }
-
-    function triggerJoinChannel() {
-      var ch = document.getElementById("join-channel-input").value.trim();
-      if (!ch) {
-        showToast("⚠️ Enter a channel link or @username!", "#f59e0b");
-        return;
-      }
-      callBackend("join", { input: ch });
-    }
-
-    function triggerLeaveByNumber() {
-      var num = document.getElementById("leave-channel-number").value.trim();
-      if (!num) {
-        showToast("⚠️ Enter a valid channel number!", "#f59e0b");
-        return;
-      }
-      callBackend("leave", { input: num });
-    }
-
-    function leaveChannelDirect(channelNumber) {
-      callBackend("leave", { input: String(channelNumber) });
-    }
-
-    function rejoinChannelDirect(channelLink) {
-      callBackend("join", { input: channelLink });
-    }
-
-    function removeAccount(phone) {
-      if (!confirm("Remove account " + phone + " from panel?")) return;
-      callBackend("remove_account", { input: phone });
-    }
-
-    // ======================================================================
-    // CYBER PARTICLE NETWORK BACKGROUND ANIMATION
-    // ======================================================================
-    var canvas = document.getElementById("cyber-canvas");
-    var ctx = canvas.getContext("2d");
-    var particles = [];
-
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
-
-    for (var i = 0; i < 55; i++) {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.6,
-        vy: (Math.random() - 0.5) * 0.6,
-        r: Math.random() * 2 + 1
-      });
-    }
-
-    function drawParticles() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (var i = 0; i < particles.length; i++) {
-        var p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = "#00f0ff";
-        ctx.fill();
-
-        for (var j = i + 1; j < particles.length; j++) {
-          var p2 = particles[j];
-          var dist = Math.hypot(p.x - p2.x, p.y - p2.y);
-          if (dist < 130) {
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = "rgba(0, 240, 255, " + (1 - dist / 130) * 0.25 + ")";
-            ctx.stroke();
+      function handleDigitPress(d) {
+        beep(700, "sine", 0.06);
+        if (enteredPin.length < 6) {
+          enteredPin += String(d);
+          renderLedBoxes();
+          if (enteredPin.length === 6) {
+            setTimeout(checkPinNow, 100);
           }
         }
       }
-      requestAnimationFrame(drawParticles);
-    }
-    drawParticles();
+
+      // Bind Keypad Tiles
+      var digitButtons = document.querySelectorAll(".key-tile[data-digit]");
+      for (var b = 0; b < digitButtons.length; b++) {
+        digitButtons[b].addEventListener("click", function () {
+          var dg = this.getAttribute("data-digit");
+          handleDigitPress(dg);
+        });
+      }
+
+      // Bind Clear & Open Buttons
+      var btnClr = document.getElementById("btn-key-clr");
+      if (btnClr) {
+        btnClr.addEventListener("click", function () {
+          beep(320, "sawtooth", 0.09);
+          enteredPin = "";
+          var directInp = document.getElementById("direct-pin-input");
+          if (directInp) directInp.value = "";
+          renderLedBoxes();
+          var fb = document.getElementById("vault-feedback");
+          if (fb) fb.textContent = "🛡️ PIN CLEARED • ENTER 6-DIGIT PIN";
+        });
+      }
+
+      var btnEnter = document.getElementById("btn-key-enter");
+      if (btnEnter) {
+        btnEnter.addEventListener("click", checkPinNow);
+      }
+
+      var btnDirectUnlock = document.getElementById("btn-direct-unlock");
+      if (btnDirectUnlock) {
+        btnDirectUnlock.addEventListener("click", checkPinNow);
+      }
+
+      var directPinInput = document.getElementById("direct-pin-input");
+      if (directPinInput) {
+        directPinInput.addEventListener("input", function () {
+          enteredPin = this.value.replace(/\D/g, "").slice(0, 6);
+          renderLedBoxes();
+          if (enteredPin.length === 6) {
+            setTimeout(checkPinNow, 100);
+          }
+        });
+        directPinInput.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter") {
+            checkPinNow();
+          }
+        });
+      }
+
+      var btnLockPanel = document.getElementById("btn-lock-panel");
+      if (btnLockPanel) {
+        btnLockPanel.addEventListener("click", function () {
+          try {
+            sessionStorage.removeItem("kumar_vault_unlocked");
+          } catch (e) {}
+          enteredPin = "";
+          renderLedBoxes();
+          var overlay = document.getElementById("vault-overlay");
+          if (overlay) overlay.classList.remove("vault-open");
+          toast("🔒 Vault Locked.", "#f59e0b");
+        });
+      }
+
+      // Auto-unlock if already verified in current session
+      try {
+        if (sessionStorage.getItem("kumar_vault_unlocked") === "yes") {
+          var overlayEl = document.getElementById("vault-overlay");
+          if (overlayEl) overlayEl.classList.add("vault-open");
+          loadDashboardState(true);
+        }
+      } catch (e) {}
+
+      // ====================================================================
+      // TABS, THEME & CLOCK
+      // ====================================================================
+      var tabBtns = document.querySelectorAll(".cmd-tab[data-target]");
+      for (var t = 0; t < tabBtns.length; t++) {
+        tabBtns[t].addEventListener("click", function () {
+          beep(580, "sine", 0.05);
+          var targetId = this.getAttribute("data-target");
+          var allPanes = document.querySelectorAll(".view-pane");
+          for (var p = 0; p < allPanes.length; p++) {
+            allPanes[p].classList.remove("active-pane");
+          }
+          for (var k = 0; k < tabBtns.length; k++) {
+            tabBtns[k].classList.remove("active-tab");
+          }
+          var targetPane = document.getElementById(targetId);
+          if (targetPane) targetPane.classList.add("active-pane");
+          this.classList.add("active-tab");
+        });
+      }
+
+      var themeSelect = document.getElementById("theme-switcher");
+      if (themeSelect) {
+        themeSelect.addEventListener("change", function () {
+          document.body.className = this.value;
+          toast("🎨 Visual Theme Updated!", "#f59e0b");
+        });
+      }
+
+      setInterval(function () {
+        var clk = document.getElementById("header-clock");
+        if (clk) clk.textContent = "🕒 " + new Date().toLocaleTimeString();
+      }, 1000);
+
+      // ====================================================================
+      // BACKEND API ENGINE
+      // ====================================================================
+      async function sendApiRequest(action, extraData) {
+        extraData = extraData || {};
+        writeConsole("⏳ <b>Executing [" + action.toUpperCase() + "]... Please wait...</b>");
+        try {
+          var payload = {
+            action: action,
+            webPin: MASTER_PIN_CODE
+          };
+          for (var key in extraData) {
+            payload[key] = extraData[key];
+          }
+          var response = await fetch("/api/panel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          var result = await response.json();
+          if (result.reply) {
+            writeConsole(result.reply);
+          }
+          if (result.pendingPhone) {
+            var banner = document.getElementById("active-session-banner");
+            if (banner) {
+              banner.innerHTML =
+                "🟢 <b>Pending Phone:</b> <code>" +
+                result.pendingPhone +
+                "</code><br>🔢 <b>Dedicated API_ID:</b> <code>" +
+                (result.pendingApiId || "Saved") +
+                "</code>";
+            }
+          }
+          loadDashboardState(true);
+          return result;
+        } catch (err) {
+          writeConsole("❌ <b>Connection Error:</b> " + err.message);
+          toast("❌ Error: " + err.message, "#f43f5e");
+        }
+      }
+
+      async function loadDashboardState(silent) {
+        try {
+          var response = await fetch("/api/panel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "dashboard_stats",
+              webPin: MASTER_PIN_CODE
+            })
+          });
+          var data = await response.json();
+          accountsList = Array.isArray(data.accounts) ? data.accounts : [];
+          channelsList = Array.isArray(data.channels) ? data.channels : [];
+
+          document.getElementById("metric-accounts").textContent = accountsList.length;
+          document.getElementById("metric-channels").textContent = channelsList.length;
+
+          var joinedCnt = 0;
+          for (var i = 0; i < channelsList.length; i++) {
+            if (channelsList[i] && String(channelsList[i].status).indexOf("🟢") !== -1) {
+              joinedCnt++;
+            }
+          }
+          document.getElementById("metric-joined").textContent = joinedCnt;
+
+          var banner = document.getElementById("active-session-banner");
+          if (banner) {
+            if (data.pendingAuth && data.pendingAuth.phone) {
+              banner.innerHTML =
+                "🟢 <b>Waiting OTP / 2FA For:</b> <code>" +
+                data.pendingAuth.phone +
+                "</code><br>🔢 <b>Account API_ID:</b> <code>" +
+                data.pendingAuth.apiId +
+                "</code>";
+            } else {
+              banner.innerHTML =
+                "No pending OTP session. Enter API_ID, API_HASH, and Phone on the left to start!";
+            }
+          }
+
+          drawAccountsTable();
+          drawChannelsTables();
+          if (!silent) toast("⚡ Synced with Firebase DB!", "#10b981");
+        } catch (e) {}
+      }
+
+      function drawAccountsTable() {
+        var tbody = document.getElementById("tbody-accounts");
+        if (!tbody) return;
+        if (!accountsList.length) {
+          tbody.innerHTML =
+            '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">📭 No accounts connected yet. Enter API_ID, API_HASH & Phone above!</td></tr>';
+          return;
+        }
+        tbody.innerHTML = "";
+        for (var i = 0; i < accountsList.length; i++) {
+          (function (idx, acc) {
+            var tr = document.createElement("tr");
+            var maskedHash = acc.apiHash ? String(acc.apiHash).substring(0, 8) + "••••" : "Saved";
+            tr.innerHTML =
+              "<td><b>#" + (idx + 1) + "</b></td>" +
+              "<td><b>" + (acc.name || "User") + "</b></td>" +
+              "<td>@" + (acc.username || "None") + "</td>" +
+              "<td><code>" + acc.phone + "</code></td>" +
+              '<td><span class="api-tag">' + (acc.apiId || "Set") + "</span></td>" +
+              "<td><code>" + maskedHash + "</code></td>" +
+              "<td>" + (acc.addedOn || "Active") + "</td>" +
+              "<td></td>";
+
+            var btnDel = document.createElement("button");
+            btnDel.type = "button";
+            btnDel.className = "action-btn btn-crimson btn-mini";
+            btnDel.textContent = "🗑️ REMOVE";
+            btnDel.addEventListener("click", function () {
+              if (confirm("Remove account " + acc.phone + "?")) {
+                sendApiRequest("remove_account", { input: acc.phone });
+              }
+            });
+            tr.lastChild.appendChild(btnDel);
+            tbody.appendChild(tr);
+          })(i, accountsList[i]);
+        }
+      }
+
+      function drawChannelsTables() {
+        var tbMain = document.getElementById("tbody-channels-main");
+        var tbFull = document.getElementById("tbody-channels-full");
+        if (!tbMain || !tbFull) return;
+
+        if (!channelsList.length) {
+          var emptyHtml =
+            '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">📭 No channels registered in Firebase yet.</td></tr>';
+          tbMain.innerHTML = emptyHtml;
+          tbFull.innerHTML = emptyHtml;
+          return;
+        }
+
+        tbMain.innerHTML = "";
+        tbFull.innerHTML = "";
+
+        for (var i = 0; i < channelsList.length; i++) {
+          (function (idx, ch) {
+            var num = idx + 1;
+            var isJoined = String(ch.status).indexOf("🟢") !== -1;
+            var statusClass = isJoined ? "status-joined" : "status-left";
+
+            function createChannelRow() {
+              var tr = document.createElement("tr");
+              tr.innerHTML =
+                "<td><b>[" + num + "]</b></td>" +
+                "<td><b>" + (ch.title || ch.input) + "</b></td>" +
+                "<td><code>" + ch.input + "</code></td>" +
+                '<td><span class="' + statusClass + '">' + ch.status + "</span></td>" +
+                '<td style="display:flex;gap:6px;flex-wrap:wrap;"></td>';
+
+              var btnLeave = document.createElement("button");
+              btnLeave.type = "button";
+              btnLeave.className = "action-btn btn-crimson btn-mini";
+              btnLeave.textContent = "📤 LEAVE ALL IDs";
+              btnLeave.addEventListener("click", function () {
+                sendApiRequest("leave", { input: String(num) });
+              });
+
+              var btnRejoin = document.createElement("button");
+              btnRejoin.type = "button";
+              btnRejoin.className = "action-btn btn-ghost btn-mini";
+              btnRejoin.textContent = "📥 RE-JOIN";
+              btnRejoin.addEventListener("click", function () {
+                sendApiRequest("join", { input: ch.input });
+              });
+
+              tr.lastChild.appendChild(btnLeave);
+              tr.lastChild.appendChild(btnRejoin);
+              return tr;
+            }
+
+            tbMain.appendChild(createChannelRow());
+            tbFull.appendChild(createChannelRow());
+          })(i, channelsList[i]);
+        }
+      }
+
+      // ====================================================================
+      // FORM BUTTON BINDINGS
+      // ====================================================================
+      document.getElementById("btn-send-otp").addEventListener("click", function () {
+        var apiId = document.getElementById("inp-api-id").value.trim();
+        var apiHash = document.getElementById("inp-api-hash").value.trim();
+        var phone = document.getElementById("inp-phone").value.trim();
+
+        if (!apiId || !apiHash) {
+          toast("⚠️ Enter both Account API_ID & API_HASH!", "#f43f5e");
+          return;
+        }
+        if (!phone) {
+          toast("⚠️ Enter the Phone Number (+91...)!", "#f43f5e");
+          return;
+        }
+        sendApiRequest("send_code", {
+          apiId: apiId,
+          apiHash: apiHash,
+          input: phone
+        });
+      });
+
+      document.getElementById("btn-verify-otp").addEventListener("click", function () {
+        var otp = document.getElementById("inp-otp").value.trim();
+        if (!otp) {
+          toast("⚠️ Enter the 5-digit OTP!", "#f43f5e");
+          return;
+        }
+        sendApiRequest("verify_code", { input: otp });
+      });
+
+      document.getElementById("btn-verify-2fa").addEventListener("click", function () {
+        var pwd = document.getElementById("inp-2fa").value.trim();
+        if (!pwd) {
+          toast("⚠️ Enter your 2FA Cloud Password!", "#f43f5e");
+          return;
+        }
+        sendApiRequest("verify_2fa", { input: pwd });
+      });
+
+      document.getElementById("btn-join-channel").addEventListener("click", function () {
+        var chan = document.getElementById("inp-join-channel").value.trim();
+        if (!chan) {
+          toast("⚠️ Enter a Channel Link or @username!", "#f43f5e");
+          return;
+        }
+        sendApiRequest("join", { input: chan });
+      });
+
+      document.getElementById("btn-leave-number").addEventListener("click", function () {
+        var num = document.getElementById("inp-leave-number").value.trim();
+        if (!num) {
+          toast("⚠️ Enter a Channel Number from the list!", "#f43f5e");
+          return;
+        }
+        sendApiRequest("leave", { input: num });
+      });
+
+      document.getElementById("btn-clear-log").addEventListener("click", function () {
+        document.getElementById("console-box").innerHTML = "👑 [CONSOLE CLEARED]: Ready for next operation...";
+      });
+
+      document.getElementById("btn-sync-now").addEventListener("click", function () {
+        loadDashboardState(false);
+      });
+    })();
   </script>
 </body>
 </html>`;
@@ -1808,7 +1790,6 @@ module.exports = async (req, res) => {
 
   const { action, input, apiId, apiHash, webPin } = req.body || {};
 
-  // Verify Master PIN 252010 if coming from Web Panel
   if (webPin !== undefined && String(webPin) !== MASTER_PIN) {
     return res.status(403).json({
       nextStep: "",
@@ -1817,7 +1798,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // ================= 0. DASHBOARD STATS & INITIAL LOAD =================
+    // ================= 0. DASHBOARD STATS =================
     if (action === "dashboard_stats") {
       let accounts = (await fbGet("panel/accounts")) || [];
       if (!Array.isArray(accounts)) accounts = Object.values(accounts);
@@ -1849,7 +1830,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= 1. SAVE DEFAULT/FALLBACK API ID & HASH =================
+    // ================= 1. SAVE DEFAULT API CONFIG =================
     if (action === "save_api") {
       const cleanId = parseInt(String(apiId).replace(/\D/g, ""), 10);
       const cleanHash = String(apiHash).replace(/[^a-zA-Z0-9]/g, "").trim();
@@ -1857,27 +1838,20 @@ module.exports = async (req, res) => {
       if (!cleanId || cleanHash.length < 20) {
         return res.status(200).json({
           nextStep: "",
-          reply: "❌ <b>Invalid API Credentials!</b> Please enter a valid numeric API_ID and 32-character API_HASH."
+          reply: "❌ <b>Invalid API Credentials!</b>"
         });
       }
 
       await fbSet("panel/api_config", { apiId: cleanId, apiHash: cleanHash });
-
       return res.status(200).json({
         nextStep: "",
-        reply:
-          "╔════════════════════════════╗\n" +
-          "   ✅ <b>API CREDENTIALS SAVED!</b>\n" +
-          "╚════════════════════════════╝\n\n" +
-          "🔢 <b>API ID:</b> <code>" + cleanId + "</code>\n" +
-          "🔑 <b>API HASH:</b> <code>" + cleanHash.substring(0, 10) + "••••••••••</code>"
+        reply: "✅ <b>API Credentials Saved!</b> (<code>" + cleanId + "</code>)"
       });
     }
 
-    // Load Default API Config (used only if an older account or bot call doesn't pass apiId)
     const defaultApiConfig = (await fbGet("panel/api_config")) || {};
 
-    // ================= 2. SEND OTP CODE (USES THIS ACCOUNT'S API_ID & HASH) =================
+    // ================= 2. SEND OTP (PER-ACCOUNT API_ID & API_HASH) =================
     if (action === "send_code") {
       const phone = "+" + String(input || "").replace(/\D/g, "");
       const accApiId = parseInt(String(apiId || defaultApiConfig.apiId || "").replace(/\D/g, ""), 10);
@@ -1892,7 +1866,7 @@ module.exports = async (req, res) => {
             "╔════════════════════════════╗\n" +
             "   ⚠️ <b>MISSING ACCOUNT API ID/HASH</b>\n" +
             "╚════════════════════════════╝\n\n" +
-            "❌ Please enter this account's <b>API_ID</b> and <b>API_HASH</b> in boxes 1 & 2 before sending OTP!"
+            "❌ Please enter this account's <b>API_ID</b> and <b>API_HASH</b> in Boxes 1 & 2!"
         });
       }
 
@@ -1944,11 +1918,11 @@ module.exports = async (req, res) => {
           "📱 <b>Target Account:</b> <code>" + phone + "</code>\n" +
           "🔢 <b>Dedicated API_ID:</b> <code>" + accApiId + "</code>\n" +
           "📡 <b>OTP Status:</b> <code>🟢 Sent to Telegram App</code>\n\n" +
-          "👉 Now enter the 5-digit OTP in Box 4 and click <b>STEP 2: VERIFY OTP</b>!"
+          "👉 Enter the 5-digit OTP in Box 4 and click <b>STEP 2: VERIFY OTP</b>!"
       });
     }
 
-    // ================= 3. VERIFY OTP CODE (SAVES DEDICATED API_ID & HASH) =================
+    // ================= 3. VERIFY OTP & SAVE ACCOUNT =================
     if (action === "verify_code") {
       const code = String(input || "").replace(/\D/g, "");
       const tempAuth = await fbGet("panel/auth_temp");
@@ -1956,7 +1930,7 @@ module.exports = async (req, res) => {
       if (!tempAuth || !tempAuth.tempSession) {
         return res.status(200).json({
           nextStep: "",
-          reply: "❌ <b>No Active OTP Session!</b> Please enter API_ID, API_HASH, and Phone Number, then click Send OTP first."
+          reply: "❌ <b>No Active OTP Session!</b> Please send OTP first."
         });
       }
 
@@ -2007,8 +1981,7 @@ module.exports = async (req, res) => {
               "╚════════════════════════════╝\n\n" +
               "✅ <b>OTP Verified for:</b> <code>" + phone + "</code>\n" +
               "🔢 <b>Dedicated API_ID:</b> <code>" + accApiId + "</code>\n" +
-              "🛡️ Two-Step Verification is active on this account.\n\n" +
-              "👇 <b>Now enter your Cloud Password in the 2FA box on the right and click STEP 3: VERIFY 2FA PASSWORD!</b>"
+              "👇 <b>Now enter your 2FA Cloud Password on the right card and click STEP 3: VERIFY 2FA!</b>"
           });
         }
         fastDisconnect(client);
@@ -2057,14 +2030,13 @@ module.exports = async (req, res) => {
           "   🎉 <b>ACCOUNT CONNECTED!</b>\n" +
           "╚════════════════════════════╝\n\n" +
           "👤 <b>Account Name:</b> " + (me.firstName || "User") + "\n" +
-          "🌐 <b>Username:</b> @" + (me.username || "None") + "\n" +
           "📱 <b>Phone Number:</b> <code>" + phone + "</code>\n" +
           "🔢 <b>Saved API_ID:</b> <code>" + accApiId + "</code>\n" +
           "📊 <b>Total Connected IDs:</b> <code>" + accounts.length + " Accounts</code>"
       });
     }
 
-    // ================= 4. VERIFY 2FA PASSWORD (100% FIXED ENGINE) =================
+    // ================= 4. VERIFY 2FA PASSWORD =================
     if (action === "verify_2fa") {
       const password = String(input || "").trim();
       const tempAuth = await fbGet("panel/auth_temp");
@@ -2072,7 +2044,7 @@ module.exports = async (req, res) => {
       if (!tempAuth || !tempAuth.tempSession) {
         return res.status(200).json({
           nextStep: "",
-          reply: "❌ <b>Session Expired!</b> Please send OTP again for this account."
+          reply: "❌ <b>Session Expired!</b> Please request OTP again."
         });
       }
 
@@ -2089,7 +2061,6 @@ module.exports = async (req, res) => {
       );
 
       await client.connect();
-
       await verifyTelegram2FAPassword(client, accApiId, accApiHash, password);
 
       const finalSession = client.session.save();
@@ -2134,18 +2105,16 @@ module.exports = async (req, res) => {
           "   🎉 <b>2FA VERIFIED & CONNECTED!</b>\n" +
           "╚════════════════════════════╝\n\n" +
           "👤 <b>Account Name:</b> " + (me.firstName || "User") + "\n" +
-          "🌐 <b>Username:</b> @" + (me.username || "None") + "\n" +
           "📱 <b>Phone Number:</b> <code>" + phone + "</code>\n" +
           "🔢 <b>Dedicated API_ID:</b> <code>" + accApiId + "</code>\n" +
           "📊 <b>Total Connected IDs:</b> <code>" + accounts.length + " Accounts</code>"
       });
     }
 
-    // ================= LOAD ALL CONNECTED ACCOUNTS =================
+    // ================= LOAD ACCOUNTS =================
     let accounts = (await fbGet("panel/accounts")) || [];
     if (!Array.isArray(accounts)) accounts = Object.values(accounts);
 
-    // ================= REMOVE ACCOUNT =================
     if (action === "remove_account") {
       const targetPhone = String(input || "").trim();
       accounts = accounts.filter(function (a) {
@@ -2154,34 +2123,22 @@ module.exports = async (req, res) => {
       await fbSet("panel/accounts", accounts);
       return res.status(200).json({
         nextStep: "",
-        reply: "🗑️ <b>Account Removed Successfully:</b> <code>" + targetPhone + "</code>"
+        reply: "🗑️ <b>Account Removed:</b> <code>" + targetPhone + "</code>"
       });
     }
 
-    // ================= 5. MY ACCOUNTS LIST =================
     if (action === "my_accounts") {
       if (accounts.length === 0) {
         return res.status(200).json({
           nextStep: "",
-          reply: "📭 <b>No Connected Accounts!</b> Add your Telegram IDs first."
+          reply: "📭 <b>No Connected Accounts!</b>"
         });
       }
-
-      let msg =
-        "╔════════════════════════════╗\n" +
-        "   📱 <b>CONNECTED ACCOUNTS HUB</b>\n" +
-        "╚════════════════════════════╝\n" +
-        "🔋 <b>Total Active Sessions:</b> <code>" + accounts.length + " IDs</code>\n" +
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n";
-
+      let msg = "📱 <b>CONNECTED ACCOUNTS (" + accounts.length + " IDs)</b>\n\n";
       for (let i = 0; i < accounts.length; i++) {
         msg +=
-          "<b>[" + (i + 1) + "] " + accounts[i].name + "</b>\n" +
-          " ┣ 📱 <b>Phone:</b> <code>" + accounts[i].phone + "</code>\n" +
-          " ┣ 🔢 <b>API_ID:</b> <code>" + (accounts[i].apiId || defaultApiConfig.apiId || "Set") + "</code>\n" +
-          " ┗ 🟢 <b>Status:</b> <code>Online & Ready</code>\n\n";
+          "<b>[" + (i + 1) + "] " + accounts[i].name + "</b> — <code>" + accounts[i].phone + "</code> (API: <code>" + (accounts[i].apiId || "Set") + "</code>)\n";
       }
-
       return res.status(200).json({ nextStep: "", reply: msg });
     }
 
@@ -2192,7 +2149,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= 6. AUTO JOIN CHANNEL (EACH ID USES ITS OWN API_ID/HASH) =================
+    // ================= 5. AUTO JOIN CHANNEL (EACH ID USES ITS OWN API) =================
     if (action === "join") {
       const channelInput = String(input || "").trim();
       let title = channelInput;
@@ -2279,7 +2236,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= 7. LEAVE CHANNEL MENU =================
+    // ================= 6. LEAVE MENU =================
     if (action === "leave_menu") {
       let channels = (await fbGet("panel/channels")) || [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
@@ -2287,27 +2244,19 @@ module.exports = async (req, res) => {
       if (channels.length === 0) {
         return res.status(200).json({
           nextStep: "",
-          reply: "📭 <b>No Channels Found!</b> Join a channel first."
+          reply: "📭 <b>No Channels Found!</b>"
         });
       }
 
-      let msg =
-        "╔════════════════════════════╗\n" +
-        "   📤 <b>SELECT CHANNEL TO LEAVE</b>\n" +
-        "╚════════════════════════════╝\n\n";
-
+      let msg = "📤 <b>SELECT CHANNEL TO LEAVE</b>\n\n";
       for (let i = 0; i < channels.length; i++) {
-        msg +=
-          "<b>[" + (i + 1) + "] " + channels[i].title + "</b>\n" +
-          " ┣ 🔗 <code>" + channels[i].input + "</code>\n" +
-          " ┗ 📊 " + channels[i].status + "\n\n";
+        msg += "<b>[" + (i + 1) + "] " + channels[i].title + "</b> (<code>" + channels[i].input + "</code>)\n";
       }
-
-      msg += "👇 <b>Send the Channel Number (e.g. <code>1</code>) to auto-leave:</b>";
+      msg += "\n👇 Send the Channel Number to leave:";
       return res.status(200).json({ nextStep: "wait_leave", reply: msg });
     }
 
-    // ================= 8. AUTO LEAVE CHANNEL (EACH ID USES ITS OWN API_ID/HASH) =================
+    // ================= 7. AUTO LEAVE CHANNEL =================
     if (action === "leave") {
       const index = parseInt(String(input || "").trim(), 10) - 1;
       let channels = (await fbGet("panel/channels")) || [];
@@ -2356,12 +2305,11 @@ module.exports = async (req, res) => {
           "   📤 <b>MULTI-ID AUTO LEAVE DONE!</b>\n" +
           "╚════════════════════════════╝\n\n" +
           "📢 <b>Channel Name:</b> " + targetChannel.title + "\n" +
-          "🔗 <b>Channel Link:</b> <code>" + targetChannel.input + "</code>\n" +
           "🔴 <b>Left Accounts:</b> <code>" + leftCount + " / " + accounts.length + " IDs</code>"
       });
     }
 
-    // ================= 9. CHANNEL LIST =================
+    // ================= 8. CHANNEL LIST =================
     if (action === "list") {
       let channels = (await fbGet("panel/channels")) || [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
@@ -2373,21 +2321,13 @@ module.exports = async (req, res) => {
         });
       }
 
-      let msg =
-        "╔════════════════════════════╗\n" +
-        "   📋 <b>REGISTERED CHANNELS & STATUS</b>\n" +
-        "╚════════════════════════════╝\n" +
-        "📱 <b>Connected IDs:</b> <code>" + accounts.length + " Accounts</code>\n" +
-        "📢 <b>Total Channels:</b> <code>" + channels.length + "</code>\n" +
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n";
-
+      let msg = "📋 <b>REGISTERED CHANNELS & STATUS</b>\n\n";
       for (let i = 0; i < channels.length; i++) {
         msg +=
           "<b>[" + (i + 1) + "] " + channels[i].title + "</b>\n" +
-          " ┣ 🔗 <b>Link:</b> <code>" + channels[i].input + "</code>\n" +
-          " ┗ 📌 <b>Status:</b> <b>" + channels[i].status + "</b>\n\n";
+          " ┣ 🔗 <code>" + channels[i].input + "</code>\n" +
+          " ┗ 📌 <b>" + channels[i].status + "</b>\n\n";
       }
-
       return res.status(200).json({ nextStep: "", reply: msg });
     }
 
