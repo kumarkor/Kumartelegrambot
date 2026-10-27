@@ -3,7 +3,7 @@ const { StringSession } = require("telegram/sessions");
 const PasswordHelper = require("telegram/Password");
 
 // ============================================================================
-// FIREBASE REALTIME DATABASE CONFIGURATION & REST ENGINE
+// 1. CONFIGURATION & FIREBASE REALTIME DATABASE REST ENGINE
 // ============================================================================
 const DB_URL = "https://kumartelegrambot-default-rtdb.firebaseio.com";
 const MASTER_PIN = "252010";
@@ -11,9 +11,7 @@ const MASTER_PIN = "252010";
 async function fbGet(path) {
   try {
     const response = await fetch(DB_URL + "/" + path + ".json");
-    if (!response.ok) {
-      return null;
-    }
+    if (!response.ok) return null;
     return await response.json();
   } catch (err) {
     return null;
@@ -24,9 +22,7 @@ async function fbSet(path, data) {
   try {
     await fetch(DB_URL + "/" + path + ".json", {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data)
     });
     return true;
@@ -43,38 +39,37 @@ function fastDisconnect(client) {
   } catch (e) {}
 }
 
+// Per-account timeout guard so Vercel NEVER hangs or glitches
+function withTimeout(promise, ms, timeoutMsg) {
+  return Promise.race([
+    promise,
+    new Promise(function (_, reject) {
+      setTimeout(function () {
+        reject(new Error(timeoutMsg || "Account operation timed out"));
+      }, ms);
+    })
+  ]);
+}
+
 // ============================================================================
-// BULLETPROOF 2FA CLOUD PASSWORD VERIFIER
+// 2. BULLETPROOF 2FA PASSWORD VERIFIER & PARSING HELPERS
 // ============================================================================
 async function verifyTelegram2FAPassword(client, apiId, apiHash, password) {
   if (PasswordHelper && typeof PasswordHelper.computeCheck === "function") {
     const passwordInfo = await client.invoke(new Api.account.GetPassword());
     const passwordSrp = await PasswordHelper.computeCheck(passwordInfo, password);
-    await client.invoke(
-      new Api.auth.CheckPassword({
-        password: passwordSrp
-      })
-    );
+    await client.invoke(new Api.auth.CheckPassword({ password: passwordSrp }));
     return true;
   }
-
   if (PasswordHelper && typeof PasswordHelper.computeCheckPassword === "function") {
     const passwordInfo = await client.invoke(new Api.account.GetPassword());
     const passwordSrp = await PasswordHelper.computeCheckPassword(passwordInfo, password);
-    await client.invoke(
-      new Api.auth.CheckPassword({
-        password: passwordSrp
-      })
-    );
+    await client.invoke(new Api.auth.CheckPassword({ password: passwordSrp }));
     return true;
   }
-
   if (typeof client.signInWithPassword === "function") {
     await client.signInWithPassword(
-      {
-        apiId: Number(apiId),
-        apiHash: String(apiHash)
-      },
+      { apiId: Number(apiId), apiHash: String(apiHash) },
       {
         password: async function () {
           return String(password);
@@ -86,12 +81,76 @@ async function verifyTelegram2FAPassword(client, apiId, apiHash, password) {
     );
     return true;
   }
+  throw new Error("2FA verification helper unavailable.");
+}
 
-  throw new Error("2FA verification module unavailable on server.");
+// Parses https://t.me/channel/123 or https://t.me/c/1234567/89
+function parseTelegramPostLink(rawLink) {
+  const clean = String(rawLink || "").trim();
+  const cMatch = clean.match(/t\.me\/c\/(\d+)\/(\d+)/i);
+  if (cMatch) {
+    return {
+      peer: "-100" + cMatch[1],
+      msgId: parseInt(cMatch[2], 10)
+    };
+  }
+  const pubMatch = clean.match(/t\.me\/([a-zA-Z0-9_]+)\/(\d+)/i);
+  if (pubMatch) {
+    return {
+      peer: pubMatch[1],
+      msgId: parseInt(pubMatch[2], 10)
+    };
+  }
+  const slashParts = clean.replace("@", "").split("/");
+  if (slashParts.length >= 2 && !isNaN(parseInt(slashParts[1], 10))) {
+    return {
+      peer: slashParts[0],
+      msgId: parseInt(slashParts[1], 10)
+    };
+  }
+  return null;
+}
+
+// Parses https://t.me/BotName?start=PARAM or @BotName
+function parseBotReferralInput(rawInput, explicitParam) {
+  const str = String(rawInput || "").trim();
+  let botUser = str;
+  let startParam = String(explicitParam || "").trim();
+
+  if (str.indexOf("t.me/") !== -1) {
+    const afterTme = str.split("t.me/")[1];
+    const qParts = afterTme.split("?");
+    botUser = qParts[0].replace("/", "").trim();
+    if (qParts[1]) {
+      const urlParams = new URLSearchParams(qParts[1]);
+      if (urlParams.get("start")) startParam = urlParams.get("start");
+      else if (urlParams.get("startapp")) startParam = urlParams.get("startapp");
+    }
+  } else if (str.indexOf(" ") !== -1 && !startParam) {
+    const sp = str.split(/\s+/);
+    botUser = sp[0];
+    startParam = sp[1] || "";
+  }
+
+  botUser = botUser.replace("@", "").trim();
+  return { botUser: botUser, startParam: startParam };
+}
+
+// Filter accounts based on UI checkboxes
+function filterTargetAccounts(allAccounts, selectedPhones) {
+  if (!Array.isArray(selectedPhones) || selectedPhones.length === 0) {
+    return allAccounts;
+  }
+  if (selectedPhones.indexOf("ALL") !== -1) {
+    return allAccounts;
+  }
+  return allAccounts.filter(function (acc) {
+    return selectedPhones.indexOf(acc.phone) !== -1;
+  });
 }
 
 // ============================================================================
-// SUPER STYLISH ROYAL QUANTUM COMMAND CENTER UI (USING String.raw FOR 0 BUGS)
+// 3. MASTER QUANTUM WEB CONTROL PANEL UI (String.raw = ZERO ESCAPE BUGS)
 // ============================================================================
 function renderMasterWebPanel() {
   return String.raw`<!DOCTYPE html>
@@ -99,14 +158,14 @@ function renderMasterWebPanel() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>👑 KUMAR QUANTUM OS • TELEGRAM CONTROL PANEL 👑</title>
+  <title>👑 KUMAR QUANTUM SMM & MULTI-ID AUTOMATION SUITE 👑</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg-base: #070312;
-      --bg-surface: #110926;
-      --bg-card: rgba(22, 12, 46, 0.86);
-      --bg-input: #0a0518;
+      --bg-base: #060210;
+      --bg-surface: #110826;
+      --bg-card: rgba(20, 11, 44, 0.88);
+      --bg-input: #080316;
       --accent-main: #f59e0b;
       --accent-glow: rgba(245, 158, 11, 0.42);
       --accent-sec: #ec4899;
@@ -116,20 +175,21 @@ function renderMasterWebPanel() {
       --success-glow: rgba(16, 185, 129, 0.4);
       --danger: #f43f5e;
       --danger-glow: rgba(244, 63, 94, 0.4);
+      --cyan: #00f0ff;
       --text-primary: #ffffff;
       --text-secondary: #cbd5e1;
       --text-dim: #94a3b8;
       --border-glass: rgba(245, 158, 11, 0.28);
-      --border-strong: rgba(245, 158, 11, 0.75);
+      --border-strong: rgba(245, 158, 11, 0.78);
       --gradient-royal: linear-gradient(135deg, #f59e0b 0%, #ec4899 50%, #8b5cf6 100%);
       --gradient-btn: linear-gradient(90deg, #f59e0b, #d97706);
     }
 
     body.theme-emerald {
-      --bg-base: #02100a;
+      --bg-base: #020f09;
       --bg-surface: #062115;
-      --bg-card: rgba(8, 36, 24, 0.88);
-      --bg-input: #03140c;
+      --bg-card: rgba(7, 34, 22, 0.9);
+      --bg-input: #03130b;
       --accent-main: #10b981;
       --accent-glow: rgba(16, 185, 129, 0.42);
       --accent-sec: #06b6d4;
@@ -143,7 +203,7 @@ function renderMasterWebPanel() {
     body.theme-crimson {
       --bg-base: #120206;
       --bg-surface: #240610;
-      --bg-card: rgba(40, 8, 18, 0.88);
+      --bg-card: rgba(40, 8, 18, 0.9);
       --bg-input: #170309;
       --accent-main: #ff2a5f;
       --accent-glow: rgba(255, 42, 95, 0.45);
@@ -158,7 +218,7 @@ function renderMasterWebPanel() {
     body.theme-cyber {
       --bg-base: #020813;
       --bg-surface: #07152b;
-      --bg-card: rgba(10, 25, 50, 0.88);
+      --bg-card: rgba(10, 25, 50, 0.9);
       --bg-input: #040d1a;
       --accent-main: #00f0ff;
       --accent-glow: rgba(0, 240, 255, 0.45);
@@ -189,20 +249,19 @@ function renderMasterWebPanel() {
       background-attachment: fixed;
     }
 
-    /* ANIMATED GRID FLOOR */
     .quantum-grid-bg {
       position: fixed;
       inset: 0;
       background-image: 
-        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
       background-size: 36px 36px;
       pointer-events: none;
       z-index: 0;
     }
 
     /* ========================================================================
-       1. NEW ROYAL QUANTUM VAULT LOCK SCREEN (PIN: 252010)
+       1. SECURITY VAULT LOCK SCREEN (PIN: 252010)
        ======================================================================== */
     #vault-overlay {
       position: fixed;
@@ -213,7 +272,7 @@ function renderMasterWebPanel() {
       align-items: center;
       justify-content: center;
       padding: 16px;
-      transition: opacity 0.4s ease, visibility 0.4s ease;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
     }
 
     #vault-overlay.vault-open {
@@ -225,7 +284,7 @@ function renderMasterWebPanel() {
     .vault-container {
       width: 100%;
       max-width: 420px;
-      background: rgba(16, 8, 36, 0.94);
+      background: rgba(16, 8, 36, 0.96);
       border: 2px solid var(--border-strong);
       border-radius: 28px;
       padding: 26px 20px;
@@ -233,7 +292,6 @@ function renderMasterWebPanel() {
       text-align: center;
       position: relative;
       overflow: hidden;
-      backdrop-filter: blur(20px);
     }
 
     .vault-crown-badge {
@@ -249,13 +307,13 @@ function renderMasterWebPanel() {
       font-size: 11px;
       font-weight: 800;
       letter-spacing: 1.5px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       box-shadow: 0 0 20px var(--accent-glow);
     }
 
     .vault-heading {
       font-family: 'Cinzel', serif;
-      font-size: 24px;
+      font-size: 23px;
       font-weight: 900;
       background: var(--gradient-royal);
       -webkit-background-clip: text;
@@ -267,20 +325,19 @@ function renderMasterWebPanel() {
     .vault-subtext {
       font-size: 13px;
       color: var(--text-secondary);
-      margin-bottom: 18px;
+      margin-bottom: 16px;
       font-weight: 600;
     }
 
-    /* 6 DIGITAL LED DISPLAY BOXES */
     .led-pin-boxes {
       display: grid;
       grid-template-columns: repeat(6, 1fr);
       gap: 8px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .led-box {
-      height: 50px;
+      height: 48px;
       background: #06020f;
       border: 1.5px solid rgba(245, 158, 11, 0.35);
       border-radius: 12px;
@@ -291,21 +348,20 @@ function renderMasterWebPanel() {
       font-size: 22px;
       font-weight: 800;
       color: var(--accent-main);
-      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.9);
-      transition: all 0.18s ease;
+      transition: all 0.15s ease;
     }
 
     .led-box.active-digit {
       border-color: var(--accent-main);
-      background: rgba(245, 158, 11, 0.14);
-      box-shadow: 0 0 16px var(--accent-glow);
+      background: rgba(245, 158, 11, 0.16);
+      box-shadow: 0 0 15px var(--accent-glow);
       transform: translateY(-2px);
     }
 
     .led-box.error-shake {
       border-color: var(--danger);
       color: var(--danger);
-      background: rgba(244, 63, 94, 0.15);
+      background: rgba(244, 63, 94, 0.16);
       animation: shakeBox 0.35s ease;
     }
 
@@ -315,11 +371,10 @@ function renderMasterWebPanel() {
       75% { transform: translateX(7px); }
     }
 
-    /* DIRECT KEYBOARD INPUT BAR + INSTANT UNLOCK */
     .direct-pin-row {
       display: flex;
       gap: 8px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .direct-pin-field {
@@ -337,11 +392,6 @@ function renderMasterWebPanel() {
       outline: none;
     }
 
-    .direct-pin-field:focus {
-      border-color: var(--accent-main);
-      box-shadow: 0 0 15px var(--accent-glow);
-    }
-
     .direct-unlock-btn {
       background: var(--gradient-btn);
       color: #05010d;
@@ -355,7 +405,6 @@ function renderMasterWebPanel() {
       box-shadow: 0 0 20px var(--accent-glow);
     }
 
-    /* 3D TACTILE KEYPAD */
     .tactile-keypad {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -368,14 +417,13 @@ function renderMasterWebPanel() {
       border: 1px solid rgba(245, 158, 11, 0.32);
       border-bottom: 3px solid rgba(245, 158, 11, 0.6);
       border-radius: 14px;
-      padding: 13px 0;
+      padding: 12px 0;
       color: #ffffff;
       font-family: 'JetBrains Mono', monospace;
       font-size: 20px;
       font-weight: 800;
       cursor: pointer;
       user-select: none;
-      transition: transform 0.1s ease, background 0.15s ease;
     }
 
     .key-tile:active {
@@ -388,7 +436,7 @@ function renderMasterWebPanel() {
       color: #fda4af;
       border-color: rgba(244, 63, 94, 0.45);
       border-bottom-color: var(--danger);
-      font-size: 14px;
+      font-size: 13px;
     }
 
     .key-tile.key-ok {
@@ -396,7 +444,7 @@ function renderMasterWebPanel() {
       color: #ffffff;
       border-color: #34d399;
       border-bottom-color: #047857;
-      font-size: 14px;
+      font-size: 13px;
     }
 
     #vault-feedback {
@@ -412,18 +460,17 @@ function renderMasterWebPanel() {
     .master-shell {
       position: relative;
       z-index: 1;
-      max-width: 1180px;
+      max-width: 1240px;
       margin: 0 auto;
       padding: 16px 14px 100px;
     }
 
-    /* ROYAL TOP COMMAND HEADER */
     .royal-header {
       background: linear-gradient(135deg, rgba(26, 13, 54, 0.95), rgba(11, 5, 24, 0.96));
       border: 1.5px solid var(--border-strong);
       border-radius: 24px;
-      padding: 20px 22px;
-      margin-bottom: 18px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 30px var(--accent-glow);
       display: flex;
       flex-wrap: wrap;
@@ -439,9 +486,9 @@ function renderMasterWebPanel() {
     }
 
     .royal-emblem {
-      width: 58px;
-      height: 58px;
-      border-radius: 18px;
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
       background: var(--gradient-royal);
       display: flex;
       align-items: center;
@@ -453,7 +500,7 @@ function renderMasterWebPanel() {
 
     .royal-title-block h1 {
       font-family: 'Cinzel', serif;
-      font-size: 21px;
+      font-size: 20px;
       font-weight: 900;
       color: var(--accent-main);
       letter-spacing: 1.2px;
@@ -461,7 +508,7 @@ function renderMasterWebPanel() {
     }
 
     .royal-title-block p {
-      font-size: 12.5px;
+      font-size: 12px;
       color: var(--text-secondary);
       font-weight: 600;
       margin-top: 2px;
@@ -514,74 +561,135 @@ function renderMasterWebPanel() {
        ======================================================================== */
     .metrics-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 14px;
-      margin-bottom: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
     }
 
     .metric-box {
       background: var(--bg-card);
       border: 1px solid var(--border-glass);
-      border-radius: 20px;
-      padding: 18px;
+      border-radius: 18px;
+      padding: 15px 16px;
       position: relative;
       overflow: hidden;
       backdrop-filter: blur(14px);
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
-    }
-
-    .metric-box::after {
-      content: "";
-      position: absolute;
-      top: 0;
-      right: 0;
-      width: 70px;
-      height: 70px;
-      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-      pointer-events: none;
     }
 
     .metric-tag {
       font-size: 11px;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.8px;
       color: var(--text-dim);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .metric-num {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 28px;
+      font-size: 25px;
       font-weight: 800;
       color: var(--accent-main);
     }
 
     .metric-foot {
-      font-size: 11.5px;
+      font-size: 11px;
       color: var(--text-secondary);
-      margin-top: 6px;
+      margin-top: 4px;
       font-weight: 600;
     }
 
     /* ========================================================================
-       NAVIGATION TABS BAR
+       GLOBAL ACCOUNT SELECTOR BAR (CHOOSE 1, MULTIPLE, OR ALL IDs)
+       ======================================================================== */
+    .selector-bar {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-strong);
+      border-radius: 20px;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.45);
+    }
+
+    .selector-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .selector-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--accent-main);
+      letter-spacing: 0.6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .account-chips-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .acc-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--bg-input);
+      border: 1.5px solid var(--border-glass);
+      color: var(--text-secondary);
+      padding: 7px 12px;
+      border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+
+    .acc-chip.selected {
+      background: rgba(16, 185, 129, 0.16);
+      border-color: var(--success);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.3);
+    }
+
+    .acc-chip .dot-ind {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+
+    .acc-chip.selected .dot-ind {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* ========================================================================
+       6 MASTER NAVIGATION TABS
        ======================================================================== */
     .command-tabs {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-bottom: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      margin-bottom: 16px;
     }
 
     .cmd-tab {
       background: var(--bg-card);
       border: 1px solid var(--border-glass);
-      border-radius: 16px;
-      padding: 14px 10px;
+      border-radius: 14px;
+      padding: 13px 10px;
       color: var(--text-secondary);
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
       text-align: center;
       cursor: pointer;
@@ -592,13 +700,13 @@ function renderMasterWebPanel() {
       background: var(--gradient-royal);
       color: #ffffff;
       border-color: #ffffff;
-      box-shadow: 0 0 25px var(--accent-glow);
+      box-shadow: 0 0 22px var(--accent-glow);
       transform: translateY(-2px);
     }
 
     .view-pane {
       display: none;
-      animation: paneAppear 0.25s ease;
+      animation: paneAppear 0.22s ease;
     }
 
     .view-pane.active-pane {
@@ -606,26 +714,33 @@ function renderMasterWebPanel() {
     }
 
     @keyframes paneAppear {
-      from { opacity: 0; transform: translateY(8px); }
+      from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
     /* ========================================================================
-       GLASS PANELS, INPUTS & ROYAL BUTTONS
+       GLASS PANELS, INPUTS & BUTTONS
        ======================================================================== */
     .two-col-layout {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 18px;
-      margin-bottom: 18px;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .three-col-layout {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
     }
 
     .glass-panel {
       background: var(--bg-card);
       border: 1px solid var(--border-glass);
       border-radius: 22px;
-      padding: 22px;
-      margin-bottom: 18px;
+      padding: 20px;
+      margin-bottom: 16px;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(16px);
     }
@@ -637,15 +752,15 @@ function renderMasterWebPanel() {
       flex-wrap: wrap;
       gap: 10px;
       padding-bottom: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .panel-heading {
-      font-size: 15px;
+      font-size: 14.5px;
       font-weight: 800;
       color: var(--accent-main);
-      letter-spacing: 0.6px;
+      letter-spacing: 0.5px;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -663,16 +778,16 @@ function renderMasterWebPanel() {
     }
 
     .field-block {
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
 
     .field-title {
       display: flex;
       justify-content: space-between;
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 800;
       color: var(--text-secondary);
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       letter-spacing: 0.5px;
       text-transform: uppercase;
     }
@@ -682,33 +797,62 @@ function renderMasterWebPanel() {
       font-family: 'JetBrains Mono', monospace;
     }
 
-    .royal-input {
+    .royal-input, .royal-textarea, .royal-select {
       width: 100%;
-      padding: 13px 15px;
+      padding: 12px 14px;
       background: var(--bg-input);
       border: 1.5px solid var(--border-glass);
-      border-radius: 14px;
+      border-radius: 13px;
       color: #ffffff;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
+      font-size: 13.5px;
       outline: none;
       transition: all 0.2s ease;
     }
 
-    .royal-input:focus {
+    .royal-textarea {
+      min-height: 92px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .royal-input:focus, .royal-textarea:focus, .royal-select:focus {
       border-color: var(--accent-main);
-      box-shadow: 0 0 18px var(--accent-glow);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .emoji-picker-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .emoji-btn {
+      background: var(--bg-input);
+      border: 1px solid var(--border-glass);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+
+    .emoji-btn.active-emoji, .emoji-btn:hover {
+      border-color: var(--accent-main);
+      background: rgba(245, 158, 11, 0.2);
+      transform: scale(1.08);
     }
 
     .action-btn {
       width: 100%;
-      padding: 14px 18px;
+      padding: 13px 16px;
       border: none;
-      border-radius: 14px;
+      border-radius: 13px;
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 800;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.7px;
       text-transform: uppercase;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -722,34 +866,31 @@ function renderMasterWebPanel() {
     .btn-gold {
       background: var(--gradient-btn);
       color: #05010d;
-      box-shadow: 0 0 22px var(--accent-glow);
-    }
-
-    .btn-gold:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 0 32px var(--accent-glow);
+      box-shadow: 0 0 20px var(--accent-glow);
     }
 
     .btn-emerald {
       background: linear-gradient(90deg, #10b981, #059669);
       color: #ffffff;
-      box-shadow: 0 0 22px var(--success-glow);
-    }
-
-    .btn-emerald:hover {
-      transform: translateY(-2px);
+      box-shadow: 0 0 20px var(--success-glow);
     }
 
     .btn-crimson {
       background: linear-gradient(90deg, #f43f5e, #e11d48);
       color: #ffffff;
-      box-shadow: 0 0 22px var(--danger-glow);
+      box-shadow: 0 0 20px var(--danger-glow);
     }
 
     .btn-royal-purple {
       background: linear-gradient(90deg, #8b5cf6, #ec4899);
       color: #ffffff;
-      box-shadow: 0 0 22px var(--accent-sec-glow);
+      box-shadow: 0 0 20px var(--accent-sec-glow);
+    }
+
+    .btn-cyan {
+      background: linear-gradient(90deg, #06b6d4, #2563eb);
+      color: #ffffff;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.35);
     }
 
     .btn-ghost {
@@ -760,24 +901,24 @@ function renderMasterWebPanel() {
 
     .btn-mini {
       width: auto;
-      padding: 7px 13px;
+      padding: 6px 12px;
       font-size: 11px;
       margin-bottom: 0;
-      border-radius: 10px;
+      border-radius: 9px;
     }
 
     /* ========================================================================
-       LIVE HOLOGRAPHIC CONSOLE
+       LIVE CONSOLE & OTP DISPLAY CARD
        ======================================================================== */
     .console-screen {
       background: #04010a;
       border: 1.5px solid var(--border-strong);
       border-radius: 16px;
-      padding: 15px;
+      padding: 14px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12.5px;
+      font-size: 12px;
       color: #fde68a;
-      max-height: 250px;
+      max-height: 240px;
       overflow-y: auto;
       line-height: 1.6;
       white-space: pre-wrap;
@@ -790,8 +931,20 @@ function renderMasterWebPanel() {
       margin-bottom: 10px;
     }
 
+    .otp-highlight-box {
+      background: #05020d;
+      border: 2px dashed var(--success);
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #ffffff;
+      line-height: 1.6;
+    }
+
     /* ========================================================================
-       TABLES & STATUS PILLS
+       TABLES
        ======================================================================== */
     .table-scroll {
       width: 100%;
@@ -801,7 +954,7 @@ function renderMasterWebPanel() {
     .royal-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 12.5px;
     }
 
     .royal-table th {
@@ -810,13 +963,13 @@ function renderMasterWebPanel() {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       text-align: left;
-      padding: 12px 14px;
+      padding: 11px 13px;
       border-bottom: 1px solid var(--border-glass);
       white-space: nowrap;
     }
 
     .royal-table td {
-      padding: 13px 14px;
+      padding: 12px 13px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.07);
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
@@ -830,7 +983,7 @@ function renderMasterWebPanel() {
       color: #34d399;
       padding: 4px 10px;
       border-radius: 999px;
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 800;
       display: inline-block;
     }
@@ -841,7 +994,7 @@ function renderMasterWebPanel() {
       color: #fda4af;
       padding: 4px 10px;
       border-radius: 999px;
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 800;
       display: inline-block;
     }
@@ -859,14 +1012,13 @@ function renderMasterWebPanel() {
       background: rgba(245, 158, 11, 0.08);
       border: 1px dashed var(--accent-main);
       border-radius: 14px;
-      padding: 12px 15px;
-      font-size: 12.5px;
+      padding: 11px 14px;
+      font-size: 12px;
       color: var(--text-secondary);
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       line-height: 1.5;
     }
 
-    /* TOAST POPUP */
     #toast-zone {
       position: fixed;
       bottom: 20px;
@@ -892,12 +1044,7 @@ function renderMasterWebPanel() {
     }
 
     @media (max-width: 640px) {
-      .command-tabs {
-        grid-template-columns: 1fr;
-      }
-      .royal-title-block h1 {
-        font-size: 17px;
-      }
+      .royal-title-block h1 { font-size: 16px; }
     }
   </style>
 </head>
@@ -914,7 +1061,6 @@ function renderMasterWebPanel() {
       <div class="vault-heading">MASTER ACCESS LOCK</div>
       <div class="vault-subtext">Enter 6-Digit Security PIN to Unlock Control Deck</div>
 
-      <!-- 6 LED DISPLAY BOXES -->
       <div class="led-pin-boxes" id="led-boxes">
         <div class="led-box" id="led-0">-</div>
         <div class="led-box" id="led-1">-</div>
@@ -924,7 +1070,6 @@ function renderMasterWebPanel() {
         <div class="led-box" id="led-5">-</div>
       </div>
 
-      <!-- DIRECT INPUT + UNLOCK BUTTON (100% FALLBACK PROOF) -->
       <div class="direct-pin-row">
         <input
           type="tel"
@@ -937,7 +1082,6 @@ function renderMasterWebPanel() {
         <button type="button" class="direct-unlock-btn" id="btn-direct-unlock">UNLOCK ⚡</button>
       </div>
 
-      <!-- 3D TACTILE KEYPAD -->
       <div class="tactile-keypad">
         <button type="button" class="key-tile" data-digit="1">1</button>
         <button type="button" class="key-tile" data-digit="2">2</button>
@@ -966,8 +1110,8 @@ function renderMasterWebPanel() {
       <div class="royal-brand">
         <div class="royal-emblem">👑</div>
         <div class="royal-title-block">
-          <h1>TELEGRAM MASTER CONTROL PANEL</h1>
-          <p>Per-Account API_ID & API_HASH • Multi-Account Auto Join & Leave</p>
+          <h1>TELEGRAM MASTER SMM & AUTOMATION SUITE</h1>
+          <p>11+ IDs • Auto Join/Leave • Views • Reactions • Comments • Polls • Referrals • OTP Reader • Bulk DM</p>
         </div>
       </div>
       <div class="header-actions">
@@ -987,60 +1131,561 @@ function renderMasterWebPanel() {
       <div class="metric-box">
         <div class="metric-tag">📱 Connected IDs</div>
         <div class="metric-num" id="metric-accounts">0</div>
-        <div class="metric-foot">🟢 Each with Dedicated API_ID</div>
+        <div class="metric-foot">🟢 Dedicated API_ID Engine</div>
       </div>
       <div class="metric-box">
-        <div class="metric-tag">📢 Total Channels</div>
+        <div class="metric-tag">🎯 Selected IDs</div>
+        <div class="metric-num" id="metric-selected">0</div>
+        <div class="metric-foot">⚡ Active for Next Action</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-tag">📢 Tracked Channels</div>
         <div class="metric-num" id="metric-channels">0</div>
-        <div class="metric-foot">⚡ Synced in Firebase DB</div>
+        <div class="metric-foot">📥 Synced in Firebase DB</div>
       </div>
       <div class="metric-box">
-        <div class="metric-tag">🟢 Active Joined</div>
-        <div class="metric-num" id="metric-joined">0</div>
-        <div class="metric-foot">📥 Ready for Instant Control</div>
-      </div>
-      <div class="metric-box">
-        <div class="metric-tag">🔐 Vault Security</div>
-        <div class="metric-num" style="color: var(--success); font-size: 22px;">UNLOCKED</div>
-        <div class="metric-foot">🔑 Master PIN Verified</div>
+        <div class="metric-tag">🟢 Online Heartbeat</div>
+        <div class="metric-num" id="metric-online-state" style="color: var(--text-dim); font-size: 20px;">STANDBY</div>
+        <div class="metric-foot" id="metric-online-sub">🔄 Toggle in Tab 5</div>
       </div>
     </section>
 
-    <!-- NAVIGATION TABS -->
+    <!-- GLOBAL ACCOUNT SELECTOR BAR -->
+    <div class="selector-bar">
+      <div class="selector-top">
+        <div class="selector-title">
+          🎯 TARGET ACCOUNT SELECTOR (CLICK TO SELECT / DESELECT ACCOUNTS FOR ANY ACTION)
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="action-btn btn-emerald btn-mini" id="btn-select-all-accs">✅ SELECT ALL IDs</button>
+          <button type="button" class="action-btn btn-ghost btn-mini" id="btn-deselect-all-accs">❌ CLEAR SELECTION</button>
+        </div>
+      </div>
+      <div class="account-chips-wrap" id="account-selector-chips">
+        <span style="font-size: 12px; color: var(--text-dim);">Loading connected accounts...</span>
+      </div>
+    </div>
+
+    <!-- 6 MASTER NAVIGATION TABS -->
     <div class="command-tabs">
-      <button type="button" class="cmd-tab active-tab" data-target="pane-accounts">
-        ➕ 1. ADD ID (WITH API_ID & HASH)
+      <button type="button" class="cmd-tab active-tab" data-target="pane-smm">
+        🛒 1. SMM PANEL (VIEWS/REACT/POLL/COMMENT)
+      </button>
+      <button type="button" class="cmd-tab" data-target="pane-bots">
+        🤖 2. BOT REFERRAL & BLOCK BOT
+      </button>
+      <button type="button" class="cmd-tab" data-target="pane-otp-online">
+        📩 3. LIVE OTP READER & ONLINE
+      </button>
+      <button type="button" class="cmd-tab" data-target="pane-dm-group">
+        📢 4. BULK DM & GROUP POSTER
       </button>
       <button type="button" class="cmd-tab" data-target="pane-channels">
-        📥 2. JOIN / LEAVE CHANNEL
+        📥 5. CHANNEL JOIN / LEAVE
       </button>
-      <button type="button" class="cmd-tab" data-target="pane-list">
-        📋 3. CHANNEL LIST & STATUS
+      <button type="button" class="cmd-tab" data-target="pane-accounts">
+        ➕ 6. ADD ID (API_ID & HASH)
       </button>
     </div>
 
     <!-- LIVE OUTPUT CONSOLE -->
     <div class="glass-panel">
       <div class="panel-top">
-        <div class="panel-heading">🖥️ LIVE COMMAND OUTPUT CONSOLE</div>
+        <div class="panel-heading">🖥️ LIVE EXECUTION TERMINAL (ZERO-HANG CLOUD LOG)</div>
         <div style="display: flex; gap: 8px;">
           <button type="button" class="action-btn btn-ghost btn-mini" id="btn-clear-log">🧹 CLEAR</button>
           <button type="button" class="action-btn btn-ghost btn-mini" id="btn-sync-now">🔄 REFRESH</button>
         </div>
       </div>
-      <div class="console-screen" id="console-box">👑 [QUANTUM OS ONLINE]: Vault unlocked! Enter each account's API_ID, API_HASH, and Phone Number below.</div>
+      <div class="console-screen" id="console-box">👑 [QUANTUM SMM SUITE READY]: All 11+ Automation Modules Loaded! Select accounts above and launch any tool below.</div>
     </div>
 
     <!-- ====================================================================
-         PANE 1: ADD TELEGRAM ID (PER-ACCOUNT API_ID + API_HASH + OTP + 2FA)
+         PANE 1: SMM PANEL SERVICE SUITE (VIEWS, REACTIONS, COMMENTS, POLLS, COMBO)
          ==================================================================== -->
-    <div id="pane-accounts" class="view-pane active-pane">
+    <div id="pane-smm" class="view-pane active-pane">
       <div class="helper-alert">
-        ⚡ <b>DEDICATED API_ID & API_HASH SYSTEM:</b> Every Telegram account has its own <code>API_ID</code> and <code>API_HASH</code>. Enter the account's API ID, API Hash, and Phone Number below. They will be permanently saved with that account in Firebase!
+        🛒 <b>SMM PANEL SERVICE SUITE:</b> Boost any Telegram Channel or Group post using your selected accounts! Paste the Post Link (e.g. <code>https://t.me/channelname/123</code>) in any module below.
       </div>
 
       <div class="two-col-layout">
-        <!-- LEFT CARD: API_ID + API_HASH + PHONE + OTP -->
+        <!-- MODULE A: AUTO POST VIEWS BOOSTER -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">👀 AUTO POST VIEWS BOOSTER</div>
+            <span class="badge-chip">ALL SELECTED IDs</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>TELEGRAM POST LINK</label>
+              <span>PUBLIC / PRIVATE</span>
+            </div>
+            <input
+              type="text"
+              id="inp-views-link"
+              class="royal-input"
+              placeholder="e.g. https://t.me/mychannel/105"
+            />
+          </div>
+          <button type="button" class="action-btn btn-cyan" id="btn-boost-views">
+            👀 BOOST POST VIEWS NOW (SELECTED IDs)
+          </button>
+          <p style="font-size: 11.5px; color: var(--text-dim);">
+            ⚡ Increments the official eye counter (👁️) on the target post from every selected account.
+          </p>
+        </div>
+
+        <!-- MODULE B: AUTO POST EMOJI REACTIONS -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">❤️ AUTO POST EMOJI REACTIONS</div>
+            <span class="badge-chip">INSTANT REACTION</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>TELEGRAM POST LINK</label>
+              <span>REQUIRED</span>
+            </div>
+            <input
+              type="text"
+              id="inp-react-link"
+              class="royal-input"
+              placeholder="e.g. https://t.me/mychannel/105"
+            />
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>SELECT EMOJI REACTION (OR RANDOM MIX)</label>
+              <span id="selected-emoji-label">🔥</span>
+            </div>
+            <div class="emoji-picker-row" id="emoji-picker">
+              <button type="button" class="emoji-btn active-emoji" data-emoji="🔥">🔥</button>
+              <button type="button" class="emoji-btn" data-emoji="❤️">❤️</button>
+              <button type="button" class="emoji-btn" data-emoji="🎉">🎉</button>
+              <button type="button" class="emoji-btn" data-emoji="👍">👍</button>
+              <button type="button" class="emoji-btn" data-emoji="⚡">⚡</button>
+              <button type="button" class="emoji-btn" data-emoji="💯">💯</button>
+              <button type="button" class="emoji-btn" data-emoji="🤩">🤩</button>
+              <button type="button" class="emoji-btn" data-emoji="👏">👏</button>
+              <button type="button" class="emoji-btn" data-emoji="RANDOM">🎲 MIX</button>
+            </div>
+          </div>
+          <button type="button" class="action-btn btn-royal-purple" id="btn-send-reactions">
+            ❤️ SEND EMOJI REACTIONS (SELECTED IDs)
+          </button>
+        </div>
+      </div>
+
+      <div class="two-col-layout">
+        <!-- MODULE C: AUTO CHANNEL COMMENTER -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">💬 AUTO CHANNEL COMMENTER</div>
+            <span class="badge-chip">MULTI-COMMENT</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>CHANNEL POST LINK (WITH DISCUSSION ENABLED)</label>
+              <span>REQUIRED</span>
+            </div>
+            <input
+              type="text"
+              id="inp-comment-link"
+              class="royal-input"
+              placeholder="e.g. https://t.me/mychannel/105"
+            />
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>COMMENTS LIST (1 COMMENT PER LINE — ROTATES PER ID)</label>
+              <span>UNLIMITED LINES</span>
+            </div>
+            <textarea
+              id="inp-comment-list"
+              class="royal-textarea"
+              placeholder="Superb post bro 🔥&#10;100% Trusted channel 💯&#10;Awesome update! ❤️&#10;Best service ever 🚀"
+            ></textarea>
+          </div>
+          <button type="button" class="action-btn btn-emerald" id="btn-post-comments">
+            💬 AUTO POST COMMENTS ACROSS SELECTED IDs
+          </button>
+        </div>
+
+        <!-- MODULE D: AUTO POLL VOTER & SMM COMBO -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📊 AUTO POLL VOTER</div>
+            <span class="badge-chip">VOTE BOOSTER</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>POLL POST LINK</label>
+              <span>REQUIRED</span>
+            </div>
+            <input
+              type="text"
+              id="inp-poll-link"
+              class="royal-input"
+              placeholder="e.g. https://t.me/mychannel/108"
+            />
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>OPTION NUMBER TO VOTE (1 = 1st Option, 2 = 2nd Option...)</label>
+              <span>1 TO 10</span>
+            </div>
+            <input
+              type="number"
+              id="inp-poll-option"
+              class="royal-input"
+              value="1"
+              min="1"
+              max="10"
+            />
+          </div>
+          <button type="button" class="action-btn btn-gold" id="btn-vote-poll">
+            📊 AUTO VOTE POLL OPTION (SELECTED IDs)
+          </button>
+
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 14px 0;" />
+
+          <div class="panel-heading" style="font-size: 13.5px; margin-bottom: 10px;">
+            ⚡ 1-CLICK SMM MEGA COMBO (JOIN + VIEW + REACT)
+          </div>
+          <div class="field-block">
+            <input
+              type="text"
+              id="inp-smm-combo-link"
+              class="royal-input"
+              placeholder="Paste Post Link (e.g. https://t.me/channel/105)"
+            />
+          </div>
+          <button type="button" class="action-btn btn-royal-purple" id="btn-smm-combo">
+            🚀 LAUNCH SMM MEGA COMBO (JOIN + VIEWS + 🔥 REACT)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         PANE 2: AUTO BOT REFERRAL (/start) & BLOCK / UNBLOCK BOT
+         ==================================================================== -->
+    <div id="pane-bots" class="view-pane">
+      <div class="two-col-layout">
+        <!-- AUTO BOT REFERRAL BOOSTER -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">🤖 AUTO BOT REFERRAL BOOSTER (/start)</div>
+            <span class="badge-chip">SELECTED IDs</span>
+          </div>
+          <div class="helper-alert">
+            🔗 Paste your full referral link (e.g. <code>https://t.me/EarningBot?start=123456</code>) OR enter the Bot <code>@username</code> and Referral Code separately. All selected accounts above will trigger <code>/start</code> with your referral payload!
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>BOT REFERRAL LINK OR @BOTUSERNAME</label>
+              <span>*REQUIRED</span>
+            </div>
+            <input
+              type="text"
+              id="inp-bot-ref-link"
+              class="royal-input"
+              placeholder="e.g. https://t.me/SomeBot?start=REF9988 or @SomeBot"
+            />
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>OPTIONAL START PARAMETER (IF NOT IN LINK)</label>
+              <span>OPTIONAL</span>
+            </div>
+            <input
+              type="text"
+              id="inp-bot-ref-param"
+              class="royal-input"
+              placeholder="e.g. 8879628170 (leave blank if full link pasted)"
+            />
+          </div>
+          <button type="button" class="action-btn btn-emerald" id="btn-start-bot-ref">
+            🤖 AUTO /START BOT FROM SELECTED ACCOUNTS
+          </button>
+        </div>
+
+        <!-- BLOCK / UNBLOCK BOT (ALL IDs) -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">🚫 BLOCK / UNBLOCK BOT (ALL SELECTED IDs)</div>
+            <span class="badge-chip">ANTI-SPAM</span>
+          </div>
+          <div class="helper-alert" style="border-color: var(--danger);">
+            🚫 Stop unwanted bots from spamming your accounts! Enter the Bot's <code>@username</code> below to instantly <b>Block & Delete Chat History</b> or <b>Unblock</b> across all selected accounts.
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>TARGET BOT @USERNAME</label>
+              <span>*REQUIRED</span>
+            </div>
+            <input
+              type="text"
+              id="inp-block-bot-user"
+              class="royal-input"
+              placeholder="e.g. @SpammerBot"
+            />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
+            <button type="button" class="action-btn btn-crimson" id="btn-block-bot">
+              🚫 BLOCK & DELETE CHAT
+            </button>
+            <button type="button" class="action-btn btn-cyan" id="btn-unblock-bot">
+              🟢 UNBLOCK BOT
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         PANE 3: LIVE OTP / LOGIN CODE READER (777000) & ALWAYS ONLINE STATUS
+         ==================================================================== -->
+    <div id="pane-otp-online" class="view-pane">
+      <div class="two-col-layout">
+        <!-- LIVE OTP / LOGIN CODE READER -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📩 LIVE OTP / LOGIN CODE READER (777000)</div>
+            <span class="badge-chip">INSTANT OTP</span>
+          </div>
+          <div class="helper-alert">
+            🔑 Select any connected Telegram account from the dropdown below (or choose <b>SCAN ALL SELECTED ACCOUNTS</b>) to read incoming Telegram login verification codes from <code>777000</code>!
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>SELECT ACCOUNT TO READ OTP</label>
+              <span>DROPDOWN</span>
+            </div>
+            <select id="sel-otp-account" class="royal-select">
+              <option value="SELECTED">🔍 SCAN ALL SELECTED ACCOUNTS</option>
+            </select>
+          </div>
+          <button type="button" class="action-btn btn-gold" id="btn-read-otp">
+            📩 FETCH LATEST LOGIN OTP CODE NOW
+          </button>
+
+          <div class="otp-highlight-box" id="otp-reader-result">
+            📭 Select an account and click <b>FETCH LATEST LOGIN OTP CODE NOW</b> to view the 5-digit Telegram code here.
+          </div>
+        </div>
+
+        <!-- ALWAYS ONLINE STATUS (ON / OFF CONTROLLER) -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">🟢 ALWAYS ONLINE STATUS CONTROLLER</div>
+            <span class="badge-chip">ON / OFF</span>
+          </div>
+          <div class="helper-alert" style="border-color: var(--success);">
+            🟢 Control the online presence of your selected Telegram accounts. You can push an instant <b>ONLINE / OFFLINE</b> status or turn on the <b>24/7 Auto-Online Heartbeat Loop</b>!
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;">
+            <button type="button" class="action-btn btn-emerald" id="btn-set-online">
+              🟢 SET SELECTED IDs ONLINE
+            </button>
+            <button type="button" class="action-btn btn-crimson" id="btn-set-offline">
+              🔴 SET SELECTED IDs OFFLINE
+            </button>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 16px 0;" />
+
+          <div class="panel-heading" style="font-size: 13.5px; margin-bottom: 8px;">
+            🔄 24/7 AUTO-ONLINE HEARTBEAT LOOP (KEEP ALIVE)
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+            When enabled, this panel automatically pings Telegram every 45 seconds in the background so your selected accounts stay <b>🟢 Online</b> continuously without hanging!
+          </p>
+          <button type="button" class="action-btn btn-cyan" id="btn-toggle-heartbeat">
+            ▶️ START 24/7 ALWAYS-ONLINE HEARTBEAT
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         PANE 4: BULK DM SENDER & GROUP AUTO POSTER (AD SPAMMER)
+         ==================================================================== -->
+    <div id="pane-dm-group" class="view-pane">
+      <div class="two-col-layout">
+        <!-- GROUP AUTO POSTER (AD SPAMMER) -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📢 GROUP AUTO POSTER (AD SPAMMER)</div>
+            <span class="badge-chip">MULTI-GROUP</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>TARGET GROUP LINKS OR @USERNAMES (1 PER LINE OR COMMA SEPARATED)</label>
+              <span>AUTO-JOINS & POSTS</span>
+            </div>
+            <textarea
+              id="inp-group-targets"
+              class="royal-textarea"
+              placeholder="@publicgroup1&#10;@publicgroup2&#10;https://t.me/+PrivateGroupInvite"
+            ></textarea>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>PROMOTIONAL AD MESSAGE TO POST</label>
+              <span>SUPPORTS TEXT & LINKS</span>
+            </div>
+            <textarea
+              id="inp-group-ad-msg"
+              class="royal-textarea"
+              placeholder="🔥 Join our official channel for daily giveaways & tricks! 👉 @MyChannel"
+            ></textarea>
+          </div>
+          <button type="button" class="action-btn btn-gold" id="btn-post-group-ads">
+            📢 SEND AD TO ALL GROUPS NOW (SELECTED IDs)
+          </button>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+            <input
+              type="number"
+              id="inp-spam-interval"
+              class="royal-input"
+              style="max-width: 130px; padding: 9px;"
+              value="5"
+              min="1"
+              placeholder="Mins"
+            />
+            <button type="button" class="action-btn btn-ghost" style="margin-bottom: 0;" id="btn-toggle-group-loop">
+              ⏱️ START AUTO-REPEAT AD TIMER (MINS)
+            </button>
+          </div>
+        </div>
+
+        <!-- BULK DM / AUTO MESSAGE SENDER -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📩 BULK DM / AUTO MESSAGE SENDER</div>
+            <span class="badge-chip">SELECTED IDs</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>TARGET RECIPIENTS (@USERNAME OR PHONE, 1 PER LINE)</label>
+              <span>MULTI-TARGET</span>
+            </div>
+            <textarea
+              id="inp-dm-targets"
+              class="royal-textarea"
+              placeholder="@username1&#10;@username2&#10;+919876543210"
+            ></textarea>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>DIRECT MESSAGE (DM) CONTENT</label>
+              <span>REQUIRED</span>
+            </div>
+            <textarea
+              id="inp-dm-text"
+              class="royal-textarea"
+              placeholder="Hello! Check out our exclusive Telegram service 🚀"
+            ></textarea>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>DELIVERY MODE</label>
+              <span>SMART ROUTING</span>
+            </div>
+            <select id="sel-dm-mode" class="royal-select">
+              <option value="round_robin">🔄 Smart Distribute (Each ID messages different targets)</option>
+              <option value="all_to_all">💥 Blast Mode (Every selected ID messages every target)</option>
+            </select>
+          </div>
+          <button type="button" class="action-btn btn-royal-purple" id="btn-send-bulk-dm">
+            📩 LAUNCH BULK DM CAMPAIGN NOW
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         PANE 5: CHANNEL AUTO JOIN, AUTO LEAVE & REGISTERED CHANNEL LIST
+         ==================================================================== -->
+    <div id="pane-channels" class="view-pane">
+      <div class="two-col-layout">
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📥 JOIN CHANNEL (AUTOMATIC)</div>
+            <span class="badge-chip">SELECTED IDs</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>CHANNEL LINK OR @USERNAME</label>
+              <span>PUBLIC / PRIVATE</span>
+            </div>
+            <input
+              type="text"
+              id="inp-join-channel"
+              class="royal-input"
+              placeholder="e.g. @mychannel or https://t.me/+AbCdEfG"
+            />
+          </div>
+          <button type="button" class="action-btn btn-emerald" id="btn-join-channel">
+            📥 AUTO JOIN CHANNEL (SELECTED IDs)
+          </button>
+        </div>
+
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">📤 LEAVE CHANNEL (AUTOMATIC)</div>
+            <span class="badge-chip">SELECTED IDs</span>
+          </div>
+          <div class="field-block">
+            <div class="field-title">
+              <label>CHANNEL NUMBER FROM LIST BELOW</label>
+              <span>OR 1-CLICK BELOW</span>
+            </div>
+            <input
+              type="number"
+              id="inp-leave-number"
+              class="royal-input"
+              placeholder="Enter Channel Number (e.g. 1, 2)"
+            />
+          </div>
+          <button type="button" class="action-btn btn-crimson" id="btn-leave-number">
+            📤 AUTO LEAVE SELECTED CHANNEL
+          </button>
+        </div>
+      </div>
+
+      <div class="glass-panel">
+        <div class="panel-top">
+          <div class="panel-heading">📋 REGISTERED CHANNELS & 1-CLICK AUTO LEAVE</div>
+        </div>
+        <div class="table-scroll">
+          <table class="royal-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>CHANNEL TITLE</th>
+                <th>CHANNEL LINK / USERNAME</th>
+                <th>CURRENT STATUS</th>
+                <th>INSTANT ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-channels-main"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         PANE 6: ADD TELEGRAM ID (PER-ACCOUNT API_ID + API_HASH + OTP + 2FA)
+         ==================================================================== -->
+    <div id="pane-accounts" class="view-pane">
+      <div class="helper-alert">
+        ⚡ <b>DEDICATED API_ID & API_HASH SYSTEM:</b> Enter each Telegram account's unique <code>API_ID</code>, <code>API_HASH</code>, and <code>Phone Number</code> below.
+      </div>
+
+      <div class="two-col-layout">
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">➕ ADD TELEGRAM ACCOUNT</div>
@@ -1090,7 +1735,7 @@ function renderMasterWebPanel() {
             📩 STEP 1: SEND OTP CODE TO ACCOUNT
           </button>
 
-          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 16px 0;" />
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 14px 0;" />
 
           <div class="field-block">
             <div class="field-title">
@@ -1110,7 +1755,6 @@ function renderMasterWebPanel() {
           </button>
         </div>
 
-        <!-- RIGHT CARD: 2FA CLOUD PASSWORD -->
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">🔐 2FA CLOUD PASSWORD</div>
@@ -1138,7 +1782,7 @@ function renderMasterWebPanel() {
             🔐 STEP 3: VERIFY 2FA & SAVE ACCOUNT
           </button>
 
-          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 18px 0;" />
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 16px 0;" />
 
           <div class="panel-heading" style="font-size: 13px; margin-bottom: 10px;">
             📡 ACTIVE LOGIN SESSION TRACKER
@@ -1152,7 +1796,6 @@ function renderMasterWebPanel() {
         </div>
       </div>
 
-      <!-- CONNECTED ACCOUNTS TABLE -->
       <div class="glass-panel">
         <div class="panel-top">
           <div class="panel-heading">📱 CONNECTED TELEGRAM ACCOUNTS (11+ IDs HUB)</div>
@@ -1171,116 +1814,7 @@ function renderMasterWebPanel() {
                 <th>ACTION</th>
               </tr>
             </thead>
-            <tbody id="tbody-accounts">
-              <tr>
-                <td colspan="8" style="text-align: center; color: var(--text-dim);">Loading accounts...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ====================================================================
-         PANE 2: AUTO JOIN & AUTO LEAVE CHANNELS
-         ==================================================================== -->
-    <div id="pane-channels" class="view-pane">
-      <div class="two-col-layout">
-        <!-- JOIN CHANNEL CARD -->
-        <div class="glass-panel">
-          <div class="panel-top">
-            <div class="panel-heading">📥 JOIN CHANNEL (AUTOMATIC)</div>
-            <span class="badge-chip">ALL IDs</span>
-          </div>
-          <div class="field-block">
-            <div class="field-title">
-              <label>CHANNEL LINK OR @USERNAME</label>
-              <span>PUBLIC / PRIVATE</span>
-            </div>
-            <input
-              type="text"
-              id="inp-join-channel"
-              class="royal-input"
-              placeholder="e.g. @mychannel or https://t.me/+AbCdEfG"
-            />
-          </div>
-          <button type="button" class="action-btn btn-emerald" id="btn-join-channel">
-            📥 AUTO JOIN CHANNEL FROM ALL IDs
-          </button>
-          <p style="font-size: 12px; color: var(--text-dim); margin-top: 6px;">
-            ⚡ Every connected account will automatically join this channel using its own saved <code>API_ID</code> & <code>API_HASH</code>.
-          </p>
-        </div>
-
-        <!-- LEAVE CHANNEL CARD -->
-        <div class="glass-panel">
-          <div class="panel-top">
-            <div class="panel-heading">📤 LEAVE CHANNEL (AUTOMATIC)</div>
-            <span class="badge-chip">ALL IDs</span>
-          </div>
-          <div class="field-block">
-            <div class="field-title">
-              <label>CHANNEL NUMBER FROM LIST</label>
-              <span>OR 1-CLICK BELOW</span>
-            </div>
-            <input
-              type="number"
-              id="inp-leave-number"
-              class="royal-input"
-              placeholder="Enter Channel Number (e.g. 1, 2)"
-            />
-          </div>
-          <button type="button" class="action-btn btn-crimson" id="btn-leave-number">
-            📤 AUTO LEAVE SELECTED CHANNEL (ALL IDs)
-          </button>
-          <p style="font-size: 12px; color: var(--text-dim); margin-top: 6px;">
-            💡 You can also click the red <b>📤 LEAVE ALL IDs</b> button on any channel in the table below!
-          </p>
-        </div>
-      </div>
-
-      <!-- INTERACTIVE CHANNEL LIST -->
-      <div class="glass-panel">
-        <div class="panel-top">
-          <div class="panel-heading">📋 REGISTERED CHANNELS & 1-CLICK LEAVE</div>
-        </div>
-        <div class="table-scroll">
-          <table class="royal-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>CHANNEL TITLE</th>
-                <th>CHANNEL LINK / USERNAME</th>
-                <th>CURRENT STATUS</th>
-                <th>INSTANT ACTION</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-channels-main"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ====================================================================
-         PANE 3: COMPLETE CHANNEL LIST & STATUS
-         ==================================================================== -->
-    <div id="pane-list" class="view-pane">
-      <div class="glass-panel">
-        <div class="panel-top">
-          <div class="panel-heading">📋 REGISTERED CHANNELS & LIVE STATUS</div>
-        </div>
-        <div class="table-scroll">
-          <table class="royal-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>CHANNEL TITLE</th>
-                <th>LINK / USERNAME</th>
-                <th>STATUS</th>
-                <th>ACTION</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-channels-full"></tbody>
+            <tbody id="tbody-accounts"></tbody>
           </table>
         </div>
       </div>
@@ -1290,7 +1824,7 @@ function renderMasterWebPanel() {
   <div id="toast-zone"></div>
 
   <!-- ======================================================================
-       3. BULLETPROOF FRONTEND JAVASCRIPT (ZERO ESCAPING BUGS)
+       3. FRONTEND JAVASCRIPT ENGINE (GLITCH-FREE, NO HANG, MULTI-SELECTOR)
        ====================================================================== -->
   <script>
     (function () {
@@ -1298,8 +1832,11 @@ function renderMasterWebPanel() {
       var enteredPin = "";
       var accountsList = [];
       var channelsList = [];
+      var selectedPhones = [];
+      var chosenEmoji = "🔥";
+      var onlineHeartbeatTimer = null;
+      var groupAdLoopTimer = null;
 
-      // Web Audio Synthesizer for Tactile Feedback
       var AudioCtx = window.AudioContext || window.webkitAudioContext;
       var soundCtx = AudioCtx ? new AudioCtx() : null;
 
@@ -1311,7 +1848,7 @@ function renderMasterWebPanel() {
           var g = soundCtx.createGain();
           o.type = type || "sine";
           o.frequency.setValueAtTime(freq || 600, soundCtx.currentTime);
-          g.gain.setValueAtTime(0.07, soundCtx.currentTime);
+          g.gain.setValueAtTime(0.06, soundCtx.currentTime);
           g.gain.exponentialRampToValueAtTime(0.001, soundCtx.currentTime + (dur || 0.08));
           o.connect(g);
           g.connect(soundCtx.destination);
@@ -1347,7 +1884,7 @@ function renderMasterWebPanel() {
       }
 
       // ====================================================================
-      // VAULT LOCK SCREEN LOGIC (PIN: 252010)
+      // VAULT LOCK SCREEN (PIN: 252010)
       // ====================================================================
       function renderLedBoxes() {
         for (var i = 0; i < 6; i++) {
@@ -1369,9 +1906,9 @@ function renderMasterWebPanel() {
       }
 
       function unlockVaultNow() {
-        beep(920, "triangle", 0.15);
+        beep(920, "triangle", 0.14);
         setTimeout(function () {
-          beep(1320, "triangle", 0.22);
+          beep(1320, "triangle", 0.2);
         }, 110);
         try {
           sessionStorage.setItem("kumar_vault_unlocked", "yes");
@@ -1406,91 +1943,62 @@ function renderMasterWebPanel() {
         }
       }
 
-      function handleDigitPress(d) {
-        beep(700, "sine", 0.06);
-        if (enteredPin.length < 6) {
-          enteredPin += String(d);
-          renderLedBoxes();
-          if (enteredPin.length === 6) {
-            setTimeout(checkPinNow, 100);
-          }
-        }
-      }
-
-      // Bind Keypad Tiles
       var digitButtons = document.querySelectorAll(".key-tile[data-digit]");
       for (var b = 0; b < digitButtons.length; b++) {
         digitButtons[b].addEventListener("click", function () {
+          beep(700, "sine", 0.06);
           var dg = this.getAttribute("data-digit");
-          handleDigitPress(dg);
+          if (enteredPin.length < 6) {
+            enteredPin += String(dg);
+            renderLedBoxes();
+            if (enteredPin.length === 6) {
+              setTimeout(checkPinNow, 100);
+            }
+          }
         });
       }
 
-      // Bind Clear & Open Buttons
-      var btnClr = document.getElementById("btn-key-clr");
-      if (btnClr) {
-        btnClr.addEventListener("click", function () {
-          beep(320, "sawtooth", 0.09);
-          enteredPin = "";
-          var directInp = document.getElementById("direct-pin-input");
-          if (directInp) directInp.value = "";
-          renderLedBoxes();
-          var fb = document.getElementById("vault-feedback");
-          if (fb) fb.textContent = "🛡️ PIN CLEARED • ENTER 6-DIGIT PIN";
-        });
-      }
+      document.getElementById("btn-key-clr").addEventListener("click", function () {
+        beep(320, "sawtooth", 0.09);
+        enteredPin = "";
+        document.getElementById("direct-pin-input").value = "";
+        renderLedBoxes();
+      });
 
-      var btnEnter = document.getElementById("btn-key-enter");
-      if (btnEnter) {
-        btnEnter.addEventListener("click", checkPinNow);
-      }
-
-      var btnDirectUnlock = document.getElementById("btn-direct-unlock");
-      if (btnDirectUnlock) {
-        btnDirectUnlock.addEventListener("click", checkPinNow);
-      }
+      document.getElementById("btn-key-enter").addEventListener("click", checkPinNow);
+      document.getElementById("btn-direct-unlock").addEventListener("click", checkPinNow);
 
       var directPinInput = document.getElementById("direct-pin-input");
-      if (directPinInput) {
-        directPinInput.addEventListener("input", function () {
-          enteredPin = this.value.replace(/\D/g, "").slice(0, 6);
-          renderLedBoxes();
-          if (enteredPin.length === 6) {
-            setTimeout(checkPinNow, 100);
-          }
-        });
-        directPinInput.addEventListener("keydown", function (ev) {
-          if (ev.key === "Enter") {
-            checkPinNow();
-          }
-        });
-      }
+      directPinInput.addEventListener("input", function () {
+        enteredPin = this.value.replace(/\D/g, "").slice(0, 6);
+        renderLedBoxes();
+        if (enteredPin.length === 6) {
+          setTimeout(checkPinNow, 100);
+        }
+      });
+      directPinInput.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") checkPinNow();
+      });
 
-      var btnLockPanel = document.getElementById("btn-lock-panel");
-      if (btnLockPanel) {
-        btnLockPanel.addEventListener("click", function () {
-          try {
-            sessionStorage.removeItem("kumar_vault_unlocked");
-          } catch (e) {}
-          enteredPin = "";
-          renderLedBoxes();
-          var overlay = document.getElementById("vault-overlay");
-          if (overlay) overlay.classList.remove("vault-open");
-          toast("🔒 Vault Locked.", "#f59e0b");
-        });
-      }
+      document.getElementById("btn-lock-panel").addEventListener("click", function () {
+        try {
+          sessionStorage.removeItem("kumar_vault_unlocked");
+        } catch (e) {}
+        enteredPin = "";
+        renderLedBoxes();
+        document.getElementById("vault-overlay").classList.remove("vault-open");
+        toast("🔒 Vault Locked.", "#f59e0b");
+      });
 
-      // Auto-unlock if already verified in current session
       try {
         if (sessionStorage.getItem("kumar_vault_unlocked") === "yes") {
-          var overlayEl = document.getElementById("vault-overlay");
-          if (overlayEl) overlayEl.classList.add("vault-open");
+          document.getElementById("vault-overlay").classList.add("vault-open");
           loadDashboardState(true);
         }
       } catch (e) {}
 
       // ====================================================================
-      // TABS, THEME & CLOCK
+      // TABS, EMOJI PICKER, THEME & CLOCK
       // ====================================================================
       var tabBtns = document.querySelectorAll(".cmd-tab[data-target]");
       for (var t = 0; t < tabBtns.length; t++) {
@@ -1504,19 +2012,27 @@ function renderMasterWebPanel() {
           for (var k = 0; k < tabBtns.length; k++) {
             tabBtns[k].classList.remove("active-tab");
           }
-          var targetPane = document.getElementById(targetId);
-          if (targetPane) targetPane.classList.add("active-pane");
+          document.getElementById(targetId).classList.add("active-pane");
           this.classList.add("active-tab");
         });
       }
 
-      var themeSelect = document.getElementById("theme-switcher");
-      if (themeSelect) {
-        themeSelect.addEventListener("change", function () {
-          document.body.className = this.value;
-          toast("🎨 Visual Theme Updated!", "#f59e0b");
+      var emojiBtns = document.querySelectorAll("#emoji-picker .emoji-btn");
+      for (var eIdx = 0; eIdx < emojiBtns.length; eIdx++) {
+        emojiBtns[eIdx].addEventListener("click", function () {
+          for (var j = 0; j < emojiBtns.length; j++) {
+            emojiBtns[j].classList.remove("active-emoji");
+          }
+          this.classList.add("active-emoji");
+          chosenEmoji = this.getAttribute("data-emoji");
+          document.getElementById("selected-emoji-label").textContent = chosenEmoji;
         });
       }
+
+      document.getElementById("theme-switcher").addEventListener("change", function () {
+        document.body.className = this.value;
+        toast("🎨 Visual Theme Updated!", "#f59e0b");
+      });
 
       setInterval(function () {
         var clk = document.getElementById("header-clock");
@@ -1524,15 +2040,90 @@ function renderMasterWebPanel() {
       }, 1000);
 
       // ====================================================================
-      // BACKEND API ENGINE
+      // ACCOUNT SELECTOR CHIPS LOGIC
+      // ====================================================================
+      function renderAccountSelectorChips() {
+        var wrap = document.getElementById("account-selector-chips");
+        var otpSel = document.getElementById("sel-otp-account");
+        if (!wrap) return;
+
+        if (!accountsList.length) {
+          wrap.innerHTML = '<span style="font-size:12px;color:#94a3b8;">📭 No accounts connected yet. Open Tab 6 (➕ ADD ID) to connect your accounts!</span>';
+          document.getElementById("metric-selected").textContent = "0";
+          return;
+        }
+
+        // Default select all if empty on first load
+        if (selectedPhones.length === 0) {
+          for (var s = 0; s < accountsList.length; s++) {
+            selectedPhones.push(accountsList[s].phone);
+          }
+        }
+
+        wrap.innerHTML = "";
+        if (otpSel) {
+          var currentOtpVal = otpSel.value;
+          otpSel.innerHTML = '<option value="SELECTED">🔍 SCAN ALL SELECTED ACCOUNTS (' + selectedPhones.length + ' IDs)</option>';
+          for (var m = 0; m < accountsList.length; m++) {
+            var opt = document.createElement("option");
+            opt.value = accountsList[m].phone;
+            opt.textContent = "#" + (m + 1) + " " + (accountsList[m].name || "User") + " (" + accountsList[m].phone + ")";
+            otpSel.appendChild(opt);
+          }
+          if (currentOtpVal) otpSel.value = currentOtpVal;
+        }
+
+        for (var i = 0; i < accountsList.length; i++) {
+          (function (idx, acc) {
+            var isSel = selectedPhones.indexOf(acc.phone) !== -1;
+            var chip = document.createElement("div");
+            chip.className = "acc-chip" + (isSel ? " selected" : "");
+            chip.innerHTML =
+              '<span class="dot-ind"></span>' +
+              "<span>#" + (idx + 1) + " " + (acc.name || "ID") + " (" + acc.phone.slice(-4) + ")</span>";
+            chip.addEventListener("click", function () {
+              beep(640, "sine", 0.04);
+              var pos = selectedPhones.indexOf(acc.phone);
+              if (pos !== -1) {
+                selectedPhones.splice(pos, 1);
+              } else {
+                selectedPhones.push(acc.phone);
+              }
+              renderAccountSelectorChips();
+            });
+            wrap.appendChild(chip);
+          })(i, accountsList[i]);
+        }
+
+        document.getElementById("metric-selected").textContent =
+          selectedPhones.length + " / " + accountsList.length;
+      }
+
+      document.getElementById("btn-select-all-accs").addEventListener("click", function () {
+        selectedPhones = accountsList.map(function (a) {
+          return a.phone;
+        });
+        renderAccountSelectorChips();
+        toast("✅ All " + selectedPhones.length + " Accounts Selected!", "#10b981");
+      });
+
+      document.getElementById("btn-deselect-all-accs").addEventListener("click", function () {
+        selectedPhones = [];
+        renderAccountSelectorChips();
+        toast("❌ Account Selection Cleared.", "#f43f5e");
+      });
+
+      // ====================================================================
+      // BACKEND API COMMUNICATOR
       // ====================================================================
       async function sendApiRequest(action, extraData) {
         extraData = extraData || {};
-        writeConsole("⏳ <b>Executing [" + action.toUpperCase() + "]... Please wait...</b>");
+        writeConsole("⏳ <b>Executing [" + action.toUpperCase() + "] on " + (selectedPhones.length || "ALL") + " IDs...</b>");
         try {
           var payload = {
             action: action,
-            webPin: MASTER_PIN_CODE
+            webPin: MASTER_PIN_CODE,
+            selectedPhones: selectedPhones
           };
           for (var key in extraData) {
             payload[key] = extraData[key];
@@ -1545,6 +2136,9 @@ function renderMasterWebPanel() {
           var result = await response.json();
           if (result.reply) {
             writeConsole(result.reply);
+          }
+          if (result.otpHtml) {
+            document.getElementById("otp-reader-result").innerHTML = result.otpHtml;
           }
           if (result.pendingPhone) {
             var banner = document.getElementById("active-session-banner");
@@ -1582,29 +2176,7 @@ function renderMasterWebPanel() {
           document.getElementById("metric-accounts").textContent = accountsList.length;
           document.getElementById("metric-channels").textContent = channelsList.length;
 
-          var joinedCnt = 0;
-          for (var i = 0; i < channelsList.length; i++) {
-            if (channelsList[i] && String(channelsList[i].status).indexOf("🟢") !== -1) {
-              joinedCnt++;
-            }
-          }
-          document.getElementById("metric-joined").textContent = joinedCnt;
-
-          var banner = document.getElementById("active-session-banner");
-          if (banner) {
-            if (data.pendingAuth && data.pendingAuth.phone) {
-              banner.innerHTML =
-                "🟢 <b>Waiting OTP / 2FA For:</b> <code>" +
-                data.pendingAuth.phone +
-                "</code><br>🔢 <b>Account API_ID:</b> <code>" +
-                data.pendingAuth.apiId +
-                "</code>";
-            } else {
-              banner.innerHTML =
-                "No pending OTP session. Enter API_ID, API_HASH, and Phone on the left to start!";
-            }
-          }
-
+          renderAccountSelectorChips();
           drawAccountsTable();
           drawChannelsTables();
           if (!silent) toast("⚡ Synced with Firebase DB!", "#10b981");
@@ -1651,119 +2223,232 @@ function renderMasterWebPanel() {
 
       function drawChannelsTables() {
         var tbMain = document.getElementById("tbody-channels-main");
-        var tbFull = document.getElementById("tbody-channels-full");
-        if (!tbMain || !tbFull) return;
+        if (!tbMain) return;
 
         if (!channelsList.length) {
-          var emptyHtml =
+          tbMain.innerHTML =
             '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">📭 No channels registered in Firebase yet.</td></tr>';
-          tbMain.innerHTML = emptyHtml;
-          tbFull.innerHTML = emptyHtml;
           return;
         }
 
         tbMain.innerHTML = "";
-        tbFull.innerHTML = "";
-
         for (var i = 0; i < channelsList.length; i++) {
           (function (idx, ch) {
             var num = idx + 1;
             var isJoined = String(ch.status).indexOf("🟢") !== -1;
             var statusClass = isJoined ? "status-joined" : "status-left";
 
-            function createChannelRow() {
-              var tr = document.createElement("tr");
-              tr.innerHTML =
-                "<td><b>[" + num + "]</b></td>" +
-                "<td><b>" + (ch.title || ch.input) + "</b></td>" +
-                "<td><code>" + ch.input + "</code></td>" +
-                '<td><span class="' + statusClass + '">' + ch.status + "</span></td>" +
-                '<td style="display:flex;gap:6px;flex-wrap:wrap;"></td>';
+            var tr = document.createElement("tr");
+            tr.innerHTML =
+              "<td><b>[" + num + "]</b></td>" +
+              "<td><b>" + (ch.title || ch.input) + "</b></td>" +
+              "<td><code>" + ch.input + "</code></td>" +
+              '<td><span class="' + statusClass + '">' + ch.status + "</span></td>" +
+              '<td style="display:flex;gap:6px;flex-wrap:wrap;"></td>';
 
-              var btnLeave = document.createElement("button");
-              btnLeave.type = "button";
-              btnLeave.className = "action-btn btn-crimson btn-mini";
-              btnLeave.textContent = "📤 LEAVE ALL IDs";
-              btnLeave.addEventListener("click", function () {
-                sendApiRequest("leave", { input: String(num) });
-              });
+            var btnLeave = document.createElement("button");
+            btnLeave.type = "button";
+            btnLeave.className = "action-btn btn-crimson btn-mini";
+            btnLeave.textContent = "📤 LEAVE SELECTED IDs";
+            btnLeave.addEventListener("click", function () {
+              sendApiRequest("leave", { input: String(num) });
+            });
 
-              var btnRejoin = document.createElement("button");
-              btnRejoin.type = "button";
-              btnRejoin.className = "action-btn btn-ghost btn-mini";
-              btnRejoin.textContent = "📥 RE-JOIN";
-              btnRejoin.addEventListener("click", function () {
-                sendApiRequest("join", { input: ch.input });
-              });
+            var btnRejoin = document.createElement("button");
+            btnRejoin.type = "button";
+            btnRejoin.className = "action-btn btn-ghost btn-mini";
+            btnRejoin.textContent = "📥 RE-JOIN";
+            btnRejoin.addEventListener("click", function () {
+              sendApiRequest("join", { input: ch.input });
+            });
 
-              tr.lastChild.appendChild(btnLeave);
-              tr.lastChild.appendChild(btnRejoin);
-              return tr;
-            }
-
-            tbMain.appendChild(createChannelRow());
-            tbFull.appendChild(createChannelRow());
+            tr.lastChild.appendChild(btnLeave);
+            tr.lastChild.appendChild(btnRejoin);
+            tbMain.appendChild(tr);
           })(i, channelsList[i]);
         }
       }
 
       // ====================================================================
-      // FORM BUTTON BINDINGS
+      // BIND ALL 11+ FEATURE BUTTONS
       // ====================================================================
-      document.getElementById("btn-send-otp").addEventListener("click", function () {
-        var apiId = document.getElementById("inp-api-id").value.trim();
-        var apiHash = document.getElementById("inp-api-hash").value.trim();
-        var phone = document.getElementById("inp-phone").value.trim();
 
-        if (!apiId || !apiHash) {
-          toast("⚠️ Enter both Account API_ID & API_HASH!", "#f43f5e");
-          return;
-        }
-        if (!phone) {
-          toast("⚠️ Enter the Phone Number (+91...)!", "#f43f5e");
-          return;
-        }
-        sendApiRequest("send_code", {
-          apiId: apiId,
-          apiHash: apiHash,
-          input: phone
+      // 1. SMM: Boost Post Views
+      document.getElementById("btn-boost-views").addEventListener("click", function () {
+        var link = document.getElementById("inp-views-link").value.trim();
+        if (!link) return toast("⚠️ Enter a valid Post Link!", "#f43f5e");
+        sendApiRequest("boost_views", { postLink: link });
+      });
+
+      // 2. SMM: Auto Post Emoji Reactions
+      document.getElementById("btn-send-reactions").addEventListener("click", function () {
+        var link = document.getElementById("inp-react-link").value.trim();
+        if (!link) return toast("⚠️ Enter a valid Post Link!", "#f43f5e");
+        sendApiRequest("send_reaction", { postLink: link, emoji: chosenEmoji });
+      });
+
+      // 3. SMM: Auto Channel Commenter
+      document.getElementById("btn-post-comments").addEventListener("click", function () {
+        var link = document.getElementById("inp-comment-link").value.trim();
+        var commentsRaw = document.getElementById("inp-comment-list").value.trim();
+        if (!link || !commentsRaw) return toast("⚠️ Enter Post Link and Comments!", "#f43f5e");
+        sendApiRequest("post_comments", { postLink: link, comments: commentsRaw });
+      });
+
+      // 4. SMM: Auto Poll Voter
+      document.getElementById("btn-vote-poll").addEventListener("click", function () {
+        var link = document.getElementById("inp-poll-link").value.trim();
+        var optNum = document.getElementById("inp-poll-option").value.trim();
+        if (!link) return toast("⚠️ Enter Poll Post Link!", "#f43f5e");
+        sendApiRequest("vote_poll", { postLink: link, optionNumber: optNum });
+      });
+
+      // 5. SMM: 1-Click Mega Combo (Join + Views + Reaction)
+      document.getElementById("btn-smm-combo").addEventListener("click", function () {
+        var link = document.getElementById("inp-smm-combo-link").value.trim();
+        if (!link) return toast("⚠️ Enter Post Link for SMM Combo!", "#f43f5e");
+        sendApiRequest("smm_combo", { postLink: link, emoji: chosenEmoji });
+      });
+
+      // 6. Bot Referral Booster (/start)
+      document.getElementById("btn-start-bot-ref").addEventListener("click", function () {
+        var refLink = document.getElementById("inp-bot-ref-link").value.trim();
+        var refParam = document.getElementById("inp-bot-ref-param").value.trim();
+        if (!refLink) return toast("⚠️ Enter Bot Referral Link or @username!", "#f43f5e");
+        sendApiRequest("bot_referral", { botInput: refLink, startParam: refParam });
+      });
+
+      // 7. Block / Unblock Bot
+      document.getElementById("btn-block-bot").addEventListener("click", function () {
+        var botU = document.getElementById("inp-block-bot-user").value.trim();
+        if (!botU) return toast("⚠️ Enter Target Bot @username!", "#f43f5e");
+        sendApiRequest("block_bot", { botUsername: botU, blockMode: "block" });
+      });
+
+      document.getElementById("btn-unblock-bot").addEventListener("click", function () {
+        var botU = document.getElementById("inp-block-bot-user").value.trim();
+        if (!botU) return toast("⚠️ Enter Target Bot @username!", "#f43f5e");
+        sendApiRequest("block_bot", { botUsername: botU, blockMode: "unblock" });
+      });
+
+      // 8. Live OTP Reader (777000)
+      document.getElementById("btn-read-otp").addEventListener("click", function () {
+        var targetAcc = document.getElementById("sel-otp-account").value;
+        document.getElementById("otp-reader-result").innerHTML = "⏳ <b>Scanning Telegram Service (777000) for login codes...</b>";
+        sendApiRequest("read_otp", { targetPhone: targetAcc });
+      });
+
+      // 9. Always Online Status (ON / OFF + 24/7 Heartbeat Loop)
+      document.getElementById("btn-set-online").addEventListener("click", function () {
+        sendApiRequest("set_online", { online: true }).then(function () {
+          document.getElementById("metric-online-state").textContent = "🟢 ONLINE";
+          document.getElementById("metric-online-state").style.color = "#10b981";
         });
       });
 
-      document.getElementById("btn-verify-otp").addEventListener("click", function () {
-        var otp = document.getElementById("inp-otp").value.trim();
-        if (!otp) {
-          toast("⚠️ Enter the 5-digit OTP!", "#f43f5e");
-          return;
+      document.getElementById("btn-set-offline").addEventListener("click", function () {
+        if (onlineHeartbeatTimer) {
+          clearInterval(onlineHeartbeatTimer);
+          onlineHeartbeatTimer = null;
+          document.getElementById("btn-toggle-heartbeat").textContent = "▶️ START 24/7 ALWAYS-ONLINE HEARTBEAT";
         }
-        sendApiRequest("verify_code", { input: otp });
+        sendApiRequest("set_online", { online: false }).then(function () {
+          document.getElementById("metric-online-state").textContent = "🔴 OFFLINE";
+          document.getElementById("metric-online-state").style.color = "#f43f5e";
+        });
       });
 
-      document.getElementById("btn-verify-2fa").addEventListener("click", function () {
-        var pwd = document.getElementById("inp-2fa").value.trim();
-        if (!pwd) {
-          toast("⚠️ Enter your 2FA Cloud Password!", "#f43f5e");
-          return;
+      document.getElementById("btn-toggle-heartbeat").addEventListener("click", function () {
+        if (onlineHeartbeatTimer) {
+          clearInterval(onlineHeartbeatTimer);
+          onlineHeartbeatTimer = null;
+          this.textContent = "▶️ START 24/7 ALWAYS-ONLINE HEARTBEAT";
+          document.getElementById("metric-online-sub").textContent = "⏹️ Heartbeat Stopped";
+          toast("⏹️ 24/7 Online Heartbeat Stopped.", "#f59e0b");
+        } else {
+          sendApiRequest("set_online", { online: true });
+          onlineHeartbeatTimer = setInterval(function () {
+            sendApiRequest("set_online", { online: true });
+          }, 45000);
+          this.textContent = "⏹️ STOP 24/7 ALWAYS-ONLINE HEARTBEAT (ACTIVE)";
+          document.getElementById("metric-online-state").textContent = "🟢 24/7 LIVE";
+          document.getElementById("metric-online-state").style.color = "#10b981";
+          document.getElementById("metric-online-sub").textContent = "⚡ Pinging every 45s";
+          toast("🟢 24/7 Always-Online Heartbeat Activated!", "#10b981");
         }
-        sendApiRequest("verify_2fa", { input: pwd });
       });
 
+      // 10. Group Auto Poster (Ad Spammer) + Auto Loop Timer
+      function runGroupPosterOnce() {
+        var groups = document.getElementById("inp-group-targets").value.trim();
+        var adMsg = document.getElementById("inp-group-ad-msg").value.trim();
+        if (!groups || !adMsg) {
+          toast("⚠️ Enter Group Links and Ad Message!", "#f43f5e");
+          return false;
+        }
+        sendApiRequest("group_poster", { groups: groups, messageText: adMsg });
+        return true;
+      }
+
+      document.getElementById("btn-post-group-ads").addEventListener("click", runGroupPosterOnce);
+
+      document.getElementById("btn-toggle-group-loop").addEventListener("click", function () {
+        if (groupAdLoopTimer) {
+          clearInterval(groupAdLoopTimer);
+          groupAdLoopTimer = null;
+          this.textContent = "⏱️ START AUTO-REPEAT AD TIMER (MINS)";
+          toast("⏹️ Auto Group Ad Timer Stopped.", "#f59e0b");
+        } else {
+          var mins = parseInt(document.getElementById("inp-spam-interval").value, 10) || 5;
+          if (!runGroupPosterOnce()) return;
+          groupAdLoopTimer = setInterval(runGroupPosterOnce, mins * 60 * 1000);
+          this.textContent = "⏹️ STOP AUTO-AD TIMER (EVERY " + mins + "M)";
+          toast("📢 Auto Group Poster scheduled every " + mins + " mins!", "#10b981");
+        }
+      });
+
+      // 11. Bulk DM Sender
+      document.getElementById("btn-send-bulk-dm").addEventListener("click", function () {
+        var targets = document.getElementById("inp-dm-targets").value.trim();
+        var dmText = document.getElementById("inp-dm-text").value.trim();
+        var mode = document.getElementById("sel-dm-mode").value;
+        if (!targets || !dmText) return toast("⚠️ Enter Target Usernames and Message!", "#f43f5e");
+        sendApiRequest("bulk_dm", { targets: targets, messageText: dmText, dmMode: mode });
+      });
+
+      // 12. Channel Join / Leave & Account Add
       document.getElementById("btn-join-channel").addEventListener("click", function () {
         var chan = document.getElementById("inp-join-channel").value.trim();
-        if (!chan) {
-          toast("⚠️ Enter a Channel Link or @username!", "#f43f5e");
-          return;
-        }
+        if (!chan) return toast("⚠️ Enter a Channel Link or @username!", "#f43f5e");
         sendApiRequest("join", { input: chan });
       });
 
       document.getElementById("btn-leave-number").addEventListener("click", function () {
         var num = document.getElementById("inp-leave-number").value.trim();
-        if (!num) {
-          toast("⚠️ Enter a Channel Number from the list!", "#f43f5e");
-          return;
-        }
+        if (!num) return toast("⚠️ Enter a Channel Number!", "#f43f5e");
         sendApiRequest("leave", { input: num });
+      });
+
+      document.getElementById("btn-send-otp").addEventListener("click", function () {
+        var apiId = document.getElementById("inp-api-id").value.trim();
+        var apiHash = document.getElementById("inp-api-hash").value.trim();
+        var phone = document.getElementById("inp-phone").value.trim();
+        if (!apiId || !apiHash || !phone) {
+          return toast("⚠️ Enter API_ID, API_HASH & Phone Number!", "#f43f5e");
+        }
+        sendApiRequest("send_code", { apiId: apiId, apiHash: apiHash, input: phone });
+      });
+
+      document.getElementById("btn-verify-otp").addEventListener("click", function () {
+        var otp = document.getElementById("inp-otp").value.trim();
+        if (!otp) return toast("⚠️ Enter the 5-digit OTP!", "#f43f5e");
+        sendApiRequest("verify_code", { input: otp });
+      });
+
+      document.getElementById("btn-verify-2fa").addEventListener("click", function () {
+        var pwd = document.getElementById("inp-2fa").value.trim();
+        if (!pwd) return toast("⚠️ Enter your 2FA Cloud Password!", "#f43f5e");
+        sendApiRequest("verify_2fa", { input: pwd });
       });
 
       document.getElementById("btn-clear-log").addEventListener("click", function () {
@@ -1780,7 +2465,7 @@ function renderMasterWebPanel() {
 }
 
 // ============================================================================
-// MAIN SERVERLESS API HANDLER (PER-ACCOUNT API_ID & API_HASH + FIXED 2FA)
+// 4. MAIN SERVERLESS API HANDLER (ALL 11+ AUTOMATION ENGINES + ZERO HANG)
 // ============================================================================
 module.exports = async (req, res) => {
   if (req.method === "GET") {
@@ -1788,7 +2473,8 @@ module.exports = async (req, res) => {
     return res.status(200).send(renderMasterWebPanel());
   }
 
-  const { action, input, apiId, apiHash, webPin } = req.body || {};
+  const body = req.body || {};
+  const { action, input, apiId, apiHash, webPin, selectedPhones } = body;
 
   if (webPin !== undefined && String(webPin) !== MASTER_PIN) {
     return res.status(403).json({
@@ -1836,12 +2522,8 @@ module.exports = async (req, res) => {
       const cleanHash = String(apiHash).replace(/[^a-zA-Z0-9]/g, "").trim();
 
       if (!cleanId || cleanHash.length < 20) {
-        return res.status(200).json({
-          nextStep: "",
-          reply: "❌ <b>Invalid API Credentials!</b>"
-        });
+        return res.status(200).json({ nextStep: "", reply: "❌ <b>Invalid API Credentials!</b>" });
       }
-
       await fbSet("panel/api_config", { apiId: cleanId, apiHash: cleanHash });
       return res.status(200).json({
         nextStep: "",
@@ -1862,18 +2544,7 @@ module.exports = async (req, res) => {
       if (!accApiId || accApiHash.length < 20) {
         return res.status(200).json({
           nextStep: "",
-          reply:
-            "╔════════════════════════════╗\n" +
-            "   ⚠️ <b>MISSING ACCOUNT API ID/HASH</b>\n" +
-            "╚════════════════════════════╝\n\n" +
-            "❌ Please enter this account's <b>API_ID</b> and <b>API_HASH</b> in Boxes 1 & 2!"
-        });
-      }
-
-      if (phone.length < 10) {
-        return res.status(200).json({
-          nextStep: "add_phone",
-          reply: "❌ <b>Invalid Phone Number!</b> Example: <code>+919584967727</code>"
+          reply: "⚠️ <b>Missing Account API_ID or API_HASH!</b> Please fill Boxes 1 & 2."
         });
       }
 
@@ -1885,7 +2556,6 @@ module.exports = async (req, res) => {
       );
 
       await client.connect();
-
       const result = await client.invoke(
         new Api.auth.SendCode({
           phoneNumber: phone,
@@ -1912,13 +2582,8 @@ module.exports = async (req, res) => {
         pendingPhone: phone,
         pendingApiId: accApiId,
         reply:
-          "╔════════════════════════════╗\n" +
-          "   📩 <b>LOGIN OTP DISPATCHED!</b>\n" +
-          "╚════════════════════════════╝\n\n" +
-          "📱 <b>Target Account:</b> <code>" + phone + "</code>\n" +
-          "🔢 <b>Dedicated API_ID:</b> <code>" + accApiId + "</code>\n" +
-          "📡 <b>OTP Status:</b> <code>🟢 Sent to Telegram App</code>\n\n" +
-          "👉 Enter the 5-digit OTP in Box 4 and click <b>STEP 2: VERIFY OTP</b>!"
+          "📩 <b>OTP SENT TO:</b> <code>" + phone + "</code> (API_ID: <code>" + accApiId + "</code>)\n" +
+          "👉 Enter the 5-digit OTP in Step 2!"
       });
     }
 
@@ -1928,20 +2593,15 @@ module.exports = async (req, res) => {
       const tempAuth = await fbGet("panel/auth_temp");
 
       if (!tempAuth || !tempAuth.tempSession) {
-        return res.status(200).json({
-          nextStep: "",
-          reply: "❌ <b>No Active OTP Session!</b> Please send OTP first."
-        });
+        return res.status(200).json({ nextStep: "", reply: "❌ <b>No Active OTP Session!</b>" });
       }
 
       const phone = tempAuth.phone;
       const accApiId = Number(tempAuth.apiId || defaultApiConfig.apiId);
       const accApiHash = String(tempAuth.apiHash || defaultApiConfig.apiHash);
-      const phoneCodeHash = tempAuth.phoneCodeHash;
-      const tempSession = tempAuth.tempSession;
 
       const client = new TelegramClient(
-        new StringSession(tempSession),
+        new StringSession(tempAuth.tempSession),
         accApiId,
         accApiHash,
         { connectionRetries: 2 }
@@ -1953,7 +2613,7 @@ module.exports = async (req, res) => {
         await client.invoke(
           new Api.auth.SignIn({
             phoneNumber: phone,
-            phoneCodeHash: phoneCodeHash,
+            phoneCodeHash: tempAuth.phoneCodeHash,
             phoneCode: code
           })
         );
@@ -1961,12 +2621,11 @@ module.exports = async (req, res) => {
         if (err.message && err.message.indexOf("SESSION_PASSWORD_NEEDED") !== -1) {
           const updatedSession = client.session.save();
           fastDisconnect(client);
-
           await fbSet("panel/auth_temp", {
             phone: phone,
             apiId: accApiId,
             apiHash: accApiHash,
-            phoneCodeHash: phoneCodeHash,
+            phoneCodeHash: tempAuth.phoneCodeHash,
             tempSession: updatedSession,
             time: Date.now()
           });
@@ -1975,13 +2634,7 @@ module.exports = async (req, res) => {
             nextStep: "wait_2fa",
             pendingPhone: phone,
             pendingApiId: accApiId,
-            reply:
-              "╔════════════════════════════╗\n" +
-              "   🔐 <b>2FA PASSWORD REQUIRED</b>\n" +
-              "╚════════════════════════════╝\n\n" +
-              "✅ <b>OTP Verified for:</b> <code>" + phone + "</code>\n" +
-              "🔢 <b>Dedicated API_ID:</b> <code>" + accApiId + "</code>\n" +
-              "👇 <b>Now enter your 2FA Cloud Password on the right card and click STEP 3: VERIFY 2FA!</b>"
+            reply: "🔐 <b>2FA PASSWORD REQUIRED FOR:</b> <code>" + phone + "</code>\n👉 Enter your 2FA Cloud Password in Step 3!"
           });
         }
         fastDisconnect(client);
@@ -2025,14 +2678,7 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({
         nextStep: "",
-        reply:
-          "╔════════════════════════════╗\n" +
-          "   🎉 <b>ACCOUNT CONNECTED!</b>\n" +
-          "╚════════════════════════════╝\n\n" +
-          "👤 <b>Account Name:</b> " + (me.firstName || "User") + "\n" +
-          "📱 <b>Phone Number:</b> <code>" + phone + "</code>\n" +
-          "🔢 <b>Saved API_ID:</b> <code>" + accApiId + "</code>\n" +
-          "📊 <b>Total Connected IDs:</b> <code>" + accounts.length + " Accounts</code>"
+        reply: "🎉 <b>ACCOUNT CONNECTED:</b> " + (me.firstName || "User") + " (<code>" + phone + "</code>) • Total IDs: " + accounts.length
       });
     }
 
@@ -2042,19 +2688,15 @@ module.exports = async (req, res) => {
       const tempAuth = await fbGet("panel/auth_temp");
 
       if (!tempAuth || !tempAuth.tempSession) {
-        return res.status(200).json({
-          nextStep: "",
-          reply: "❌ <b>Session Expired!</b> Please request OTP again."
-        });
+        return res.status(200).json({ nextStep: "", reply: "❌ <b>Session Expired!</b> Request OTP again." });
       }
 
       const phone = tempAuth.phone;
       const accApiId = Number(tempAuth.apiId || defaultApiConfig.apiId);
       const accApiHash = String(tempAuth.apiHash || defaultApiConfig.apiHash);
-      const tempSession = tempAuth.tempSession;
 
       const client = new TelegramClient(
-        new StringSession(tempSession),
+        new StringSession(tempAuth.tempSession),
         accApiId,
         accApiHash,
         { connectionRetries: 2 }
@@ -2100,56 +2742,675 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({
         nextStep: "",
-        reply:
-          "╔════════════════════════════╗\n" +
-          "   🎉 <b>2FA VERIFIED & CONNECTED!</b>\n" +
-          "╚════════════════════════════╝\n\n" +
-          "👤 <b>Account Name:</b> " + (me.firstName || "User") + "\n" +
-          "📱 <b>Phone Number:</b> <code>" + phone + "</code>\n" +
-          "🔢 <b>Dedicated API_ID:</b> <code>" + accApiId + "</code>\n" +
-          "📊 <b>Total Connected IDs:</b> <code>" + accounts.length + " Accounts</code>"
+        reply: "🎉 <b>2FA VERIFIED & CONNECTED:</b> " + (me.firstName || "User") + " (<code>" + phone + "</code>) • Total IDs: " + accounts.length
       });
     }
 
-    // ================= LOAD ACCOUNTS =================
-    let accounts = (await fbGet("panel/accounts")) || [];
-    if (!Array.isArray(accounts)) accounts = Object.values(accounts);
+    // ================= LOAD ALL & TARGET ACCOUNTS =================
+    let allAccounts = (await fbGet("panel/accounts")) || [];
+    if (!Array.isArray(allAccounts)) allAccounts = Object.values(allAccounts);
 
     if (action === "remove_account") {
       const targetPhone = String(input || "").trim();
-      accounts = accounts.filter(function (a) {
+      allAccounts = allAccounts.filter(function (a) {
         return a.phone !== targetPhone;
       });
-      await fbSet("panel/accounts", accounts);
-      return res.status(200).json({
-        nextStep: "",
-        reply: "🗑️ <b>Account Removed:</b> <code>" + targetPhone + "</code>"
-      });
+      await fbSet("panel/accounts", allAccounts);
+      return res.status(200).json({ nextStep: "", reply: "🗑️ <b>Account Removed:</b> <code>" + targetPhone + "</code>" });
     }
 
     if (action === "my_accounts") {
-      if (accounts.length === 0) {
-        return res.status(200).json({
-          nextStep: "",
-          reply: "📭 <b>No Connected Accounts!</b>"
-        });
-      }
-      let msg = "📱 <b>CONNECTED ACCOUNTS (" + accounts.length + " IDs)</b>\n\n";
-      for (let i = 0; i < accounts.length; i++) {
-        msg +=
-          "<b>[" + (i + 1) + "] " + accounts[i].name + "</b> — <code>" + accounts[i].phone + "</code> (API: <code>" + (accounts[i].apiId || "Set") + "</code>)\n";
+      if (allAccounts.length === 0) return res.status(200).json({ nextStep: "", reply: "📭 <b>No Connected Accounts!</b>" });
+      let msg = "📱 <b>CONNECTED ACCOUNTS (" + allAccounts.length + " IDs)</b>\n\n";
+      for (let i = 0; i < allAccounts.length; i++) {
+        msg += "<b>[" + (i + 1) + "] " + allAccounts[i].name + "</b> — <code>" + allAccounts[i].phone + "</code> (API: <code>" + (allAccounts[i].apiId || "Set") + "</code>)\n";
       }
       return res.status(200).json({ nextStep: "", reply: msg });
     }
 
-    if (accounts.length === 0) {
+    if (allAccounts.length === 0) {
+      return res.status(200).json({ nextStep: "", reply: "⚠️ <b>No Active Accounts!</b> Connect at least 1 Telegram ID first." });
+    }
+
+    const targetAccounts = filterTargetAccounts(allAccounts, selectedPhones);
+    if (targetAccounts.length === 0) {
+      return res.status(200).json({ nextStep: "", reply: "⚠️ <b>No Accounts Selected!</b> Select at least 1 account in the Target Selector Bar." });
+    }
+
+    // Helper to connect a single account with its dedicated API_ID/HASH
+    async function connectAccountClient(acc) {
+      const useApiId = Number(acc.apiId || defaultApiConfig.apiId);
+      const useApiHash = String(acc.apiHash || defaultApiConfig.apiHash);
+      const client = new TelegramClient(new StringSession(acc.session), useApiId, useApiHash, {
+        connectionRetries: 1
+      });
+      await client.connect();
+      return client;
+    }
+
+    // Helper to join a public/private channel or group if not already a member
+    async function joinPeerIfNeeded(client, rawPeer) {
+      const str = String(rawPeer || "").trim();
+      if (str.indexOf("+") !== -1 || str.indexOf("joinchat/") !== -1) {
+        const hash = str.split("+").pop().split("joinchat/").pop().replace("/", "").trim();
+        try {
+          const r = await client.invoke(new Api.messages.ImportChatInvite({ hash: hash }));
+          if (r.chats && r.chats[0]) return "-100" + r.chats[0].id.toString();
+        } catch (e) {}
+        return str;
+      } else {
+        const cleanU = str.replace("https://t.me/", "").replace("@", "").split("/")[0].trim();
+        try {
+          await client.invoke(new Api.channels.JoinChannel({ channel: cleanU }));
+        } catch (e) {}
+        return cleanU;
+      }
+    }
+
+    // ================= 5. AUTO POST VIEWS BOOSTER (ALL SELECTED IDs) =================
+    if (action === "boost_views") {
+      const parsed = parseTelegramPostLink(body.postLink);
+      if (!parsed) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Post Link!</b> Example: <code>https://t.me/channelname/123</code>" });
+      }
+
+      let boosted = 0;
+      await Promise.allSettled(
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const peerEntity = await client.getInputEntity(parsed.peer);
+                await client.invoke(
+                  new Api.messages.GetMessagesViews({
+                    peer: peerEntity,
+                    id: [Number(parsed.msgId)],
+                    increment: true
+                  })
+                );
+                boosted++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8000
+          );
+        })
+      );
+
       return res.status(200).json({
-        nextStep: "",
-        reply: "⚠️ <b>No Active Accounts!</b> Connect at least 1 Telegram ID first."
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   👀 <b>POST VIEWS BOOSTED!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🔗 <b>Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
+          "👁️ <b>Views Added:</b> <code>+" + boosted + " / " + targetAccounts.length + " IDs</code>"
       });
     }
 
-    // ================= 5. AUTO JOIN CHANNEL (EACH ID USES ITS OWN API) =================
+    // ================= 6. AUTO POST EMOJI REACTIONS (ALL SELECTED IDs) =================
+    if (action === "send_reaction") {
+      const parsed = parseTelegramPostLink(body.postLink);
+      if (!parsed) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Post Link!</b> Example: <code>https://t.me/channelname/123</code>" });
+      }
+
+      const emojiPool = ["🔥", "❤️", "🎉", "👍", "⚡", "💯", "🤩", "👏"];
+      const reqEmoji = body.emoji || "🔥";
+      let reacted = 0;
+
+      await Promise.allSettled(
+        targetAccounts.map(function (acc, idx) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const peerEntity = await client.getInputEntity(parsed.peer);
+                const useEmoji = reqEmoji === "RANDOM" ? emojiPool[idx % emojiPool.length] : reqEmoji;
+                await client.invoke(
+                  new Api.messages.SendReaction({
+                    peer: peerEntity,
+                    msgId: Number(parsed.msgId),
+                    reaction: [new Api.ReactionEmoji({ emoticon: useEmoji })]
+                  })
+                );
+                reacted++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8000
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   ❤️ <b>EMOJI REACTIONS SENT!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🔗 <b>Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
+          "✨ <b>Reaction:</b> " + reqEmoji + "\n" +
+          "🟢 <b>Reacted Accounts:</b> <code>" + reacted + " / " + targetAccounts.length + " IDs</code>"
+      });
+    }
+
+    // ================= 7. AUTO CHANNEL COMMENTER =================
+    if (action === "post_comments") {
+      const parsed = parseTelegramPostLink(body.postLink);
+      if (!parsed) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Post Link!</b> Example: <code>https://t.me/channelname/123</code>" });
+      }
+
+      const commentLines = String(body.comments || "")
+        .split(/\r?\n|\|/)
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean);
+
+      if (commentLines.length === 0) {
+        return res.status(200).json({ reply: "⚠️ <b>Please enter at least 1 comment!</b>" });
+      }
+
+      let commented = 0;
+      await Promise.allSettled(
+        targetAccounts.map(function (acc, idx) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const peerEntity = await client.getInputEntity(parsed.peer);
+                const textToPost = commentLines[idx % commentLines.length];
+
+                try {
+                  const disc = await client.invoke(
+                    new Api.messages.GetDiscussionMessage({
+                      peer: peerEntity,
+                      msgId: Number(parsed.msgId)
+                    })
+                  );
+                  if (disc && disc.messages && disc.messages[0]) {
+                    const topMsg = disc.messages[0];
+                    await client.sendMessage(topMsg.peerId, {
+                      message: textToPost,
+                      replyTo: topMsg.id
+                    });
+                    commented++;
+                    return;
+                  }
+                } catch (innerErr) {
+                  await client.sendMessage(peerEntity, {
+                    message: textToPost,
+                    commentTo: Number(parsed.msgId)
+                  });
+                  commented++;
+                }
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            9000
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   💬 <b>AUTO COMMENTS POSTED!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🔗 <b>Target Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
+          "🟢 <b>Comments Delivered:</b> <code>" + commented + " / " + targetAccounts.length + " IDs</code>"
+      });
+    }
+
+    // ================= 8. AUTO POLL VOTER =================
+    if (action === "vote_poll") {
+      const parsed = parseTelegramPostLink(body.postLink);
+      if (!parsed) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Poll Post Link!</b>" });
+      }
+
+      const optIndex = Math.max(0, (parseInt(body.optionNumber, 10) || 1) - 1);
+      let voted = 0;
+
+      await Promise.allSettled(
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const peerEntity = await client.getInputEntity(parsed.peer);
+                const msgs = await client.getMessages(peerEntity, { ids: [Number(parsed.msgId)] });
+                let optionBuffer = Buffer.from([String(optIndex).charCodeAt(0)]);
+
+                if (
+                  msgs &&
+                  msgs[0] &&
+                  msgs[0].media &&
+                  msgs[0].media.poll &&
+                  msgs[0].media.poll.answers &&
+                  msgs[0].media.poll.answers[optIndex]
+                ) {
+                  optionBuffer = msgs[0].media.poll.answers[optIndex].option;
+                }
+
+                await client.invoke(
+                  new Api.messages.SendVote({
+                    peer: peerEntity,
+                    msgId: Number(parsed.msgId),
+                    options: [optionBuffer]
+                  })
+                );
+                voted++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8500
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   📊 <b>POLL VOTES DELIVERED!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🔗 <b>Poll Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
+          "🎯 <b>Voted Option:</b> <code>Option #" + (optIndex + 1) + "</code>\n" +
+          "🟢 <b>Total Votes Cast:</b> <code>" + voted + " / " + targetAccounts.length + " IDs</code>"
+      });
+    }
+
+    // ================= 9. SMM MEGA COMBO (JOIN + VIEWS + REACTION) =================
+    if (action === "smm_combo") {
+      const parsed = parseTelegramPostLink(body.postLink);
+      if (!parsed) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Post Link!</b>" });
+      }
+
+      const emojiPool = ["🔥", "❤️", "🎉", "👍", "⚡", "💯"];
+      let completed = 0;
+
+      await Promise.allSettled(
+        targetAccounts.map(function (acc, idx) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                try {
+                  await client.invoke(new Api.channels.JoinChannel({ channel: parsed.peer }));
+                } catch (e) {}
+
+                const peerEntity = await client.getInputEntity(parsed.peer);
+                await client.invoke(
+                  new Api.messages.GetMessagesViews({
+                    peer: peerEntity,
+                    id: [Number(parsed.msgId)],
+                    increment: true
+                  })
+                );
+                await client.invoke(
+                  new Api.messages.SendReaction({
+                    peer: peerEntity,
+                    msgId: Number(parsed.msgId),
+                    reaction: [new Api.ReactionEmoji({ emoticon: emojiPool[idx % emojiPool.length] })]
+                  })
+                );
+                completed++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            9000
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   🚀 <b>SMM MEGA COMBO EXECUTED!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "📢 <b>Target:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
+          "✅ <b>Actions:</b> <code>Auto-Join + View + Reaction</code>\n" +
+          "🟢 <b>Completed By:</b> <code>" + completed + " / " + targetAccounts.length + " IDs</code>"
+      });
+    }
+
+    // ================= 10. AUTO BOT REFERRAL BOOSTER (/start) =================
+    if (action === "bot_referral") {
+      const parsedBot = parseBotReferralInput(body.botInput, body.startParam);
+      if (!parsedBot.botUser) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Bot Link or @username!</b>" });
+      }
+
+      let startedCount = 0;
+      await Promise.allSettled(
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const botEntity = await client.getInputEntity(parsedBot.botUser);
+                if (parsedBot.startParam) {
+                  await client.invoke(
+                    new Api.messages.StartBot({
+                      bot: botEntity,
+                      peer: botEntity,
+                      startParam: String(parsedBot.startParam),
+                      randomId: BigInt(Math.floor(Math.random() * 1000000000000))
+                    })
+                  );
+                } else {
+                  await client.sendMessage(botEntity, { message: "/start" });
+                }
+                startedCount++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8500
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   🤖 <b>BOT REFERRAL /START DONE!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🤖 <b>Target Bot:</b> <code>@" + parsedBot.botUser + "</code>\n" +
+          "🔗 <b>Referral Payload:</b> <code>" + (parsedBot.startParam || "Standard /start") + "</code>\n" +
+          "🟢 <b>Triggered From:</b> <code>" + startedCount + " / " + targetAccounts.length + " Selected IDs</code>"
+      });
+    }
+
+    // ================= 11. BLOCK / UNBLOCK BOT (ALL SELECTED IDs) =================
+    if (action === "block_bot") {
+      const cleanBot = String(body.botUsername || "")
+        .replace("https://t.me/", "")
+        .replace("@", "")
+        .split("?")[0]
+        .trim();
+      const isUnblock = body.blockMode === "unblock";
+      let doneCount = 0;
+
+      await Promise.allSettled(
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const peerEntity = await client.getInputEntity(cleanBot);
+                if (isUnblock) {
+                  await client.invoke(new Api.contacts.Unblock({ id: peerEntity }));
+                } else {
+                  await client.invoke(new Api.contacts.Block({ id: peerEntity }));
+                  try {
+                    await client.invoke(
+                      new Api.messages.DeleteHistory({
+                        peer: peerEntity,
+                        maxId: 0,
+                        revoke: true
+                      })
+                    );
+                  } catch (e) {}
+                }
+                doneCount++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8000
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   " + (isUnblock ? "🟢 <b>BOT UNBLOCKED!</b>" : "🚫 <b>BOT BLOCKED & CLEANED!</b>") + "\n" +
+          "╚════════════════════════════╝\n" +
+          "🤖 <b>Target Bot:</b> <code>@" + cleanBot + "</code>\n" +
+          "📊 <b>Processed IDs:</b> <code>" + doneCount + " / " + targetAccounts.length + " Accounts</code>"
+      });
+    }
+
+    // ================= 12. LIVE OTP / LOGIN CODE READER (777000) =================
+    if (action === "read_otp") {
+      const targetPhone = body.targetPhone;
+      const scanPool =
+        targetPhone && targetPhone !== "SELECTED"
+          ? allAccounts.filter(function (a) {
+              return a.phone === targetPhone;
+            })
+          : targetAccounts;
+
+      let otpCards = [];
+
+      await Promise.allSettled(
+        scanPool.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const msgs = await client.getMessages(777000, { limit: 3 });
+                let foundCode = "No recent OTP";
+                let latestText = "No service notifications found from 777000.";
+                let msgDate = "";
+
+                if (msgs && msgs.length > 0) {
+                  for (let m = 0; m < msgs.length; m++) {
+                    const txt = String(msgs[m].message || "");
+                    const codeMatch = txt.match(/\b(\d{5,6})\b/);
+                    if (codeMatch) {
+                      foundCode = codeMatch[1];
+                      latestText = txt;
+                      msgDate = msgs[m].date
+                        ? new Date(msgs[m].date * 1000).toLocaleTimeString()
+                        : "";
+                      break;
+                    }
+                  }
+                  if (foundCode === "No recent OTP" && msgs[0].message) {
+                    latestText = String(msgs[0].message);
+                  }
+                }
+
+                otpCards.push(
+                  "📱 <b>" + (acc.name || "Account") + " (<code>" + acc.phone + "</code>)</b> " + (msgDate ? "[" + msgDate + "]" : "") + "\n" +
+                  "🔑 <b>EXTRACTED OTP CODE:</b> <span style='color:#10b981;font-size:18px;font-weight:800;'>" + foundCode + "</span>\n" +
+                  "📩 <i>" + latestText.replace(/</g, "&lt;").substring(0, 220) + "</i>"
+                );
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8500
+          );
+        })
+      );
+
+      const finalOtpHtml = otpCards.length
+        ? otpCards.join("\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n")
+        : "⚠️ Could not read messages from selected account(s).";
+
+      return res.status(200).json({
+        otpHtml: finalOtpHtml,
+        reply: "📩 <b>LIVE OTP SCAN COMPLETED FOR " + scanPool.length + " ACCOUNT(S)!</b>\n\n" + finalOtpHtml
+      });
+    }
+
+    // ================= 13. ALWAYS ONLINE STATUS (ON / OFF) =================
+    if (action === "set_online") {
+      const goOnline = Boolean(body.online);
+      let updated = 0;
+
+      await Promise.allSettled(
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                await client.invoke(
+                  new Api.account.UpdateStatus({
+                    offline: !goOnline
+                  })
+                );
+                updated++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            7500
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          (goOnline ? "🟢 <b>ONLINE STATUS ACTIVATED</b>" : "🔴 <b>OFFLINE STATUS SET</b>") +
+          " across <code>" + updated + " / " + targetAccounts.length + " Selected IDs</code>!"
+      });
+    }
+
+    // ================= 14. GROUP AUTO POSTER (AD SPAMMER) =================
+    if (action === "group_poster") {
+      const groupList = String(body.groups || "")
+        .split(/\r?\n|,/)
+        .map(function (g) {
+          return g.trim();
+        })
+        .filter(Boolean);
+      const adMessage = String(body.messageText || "").trim();
+
+      if (groupList.length === 0 || !adMessage) {
+        return res.status(200).json({ reply: "⚠️ <b>Enter both Group Links and Ad Message!</b>" });
+      }
+
+      let sentMessages = 0;
+
+      await Promise.allSettled(
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                for (let g = 0; g < groupList.length; g++) {
+                  try {
+                    const resolvedPeer = await joinPeerIfNeeded(client, groupList[g]);
+                    await client.sendMessage(resolvedPeer, { message: adMessage });
+                    sentMessages++;
+                  } catch (innerErr) {}
+                }
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            9500
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   📢 <b>GROUP AD BROADCAST DONE!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🎯 <b>Target Groups:</b> <code>" + groupList.length + " Groups</code>\n" +
+          "📱 <b>Selected Accounts:</b> <code>" + targetAccounts.length + " IDs</code>\n" +
+          "🟢 <b>Total Ad Posts Sent:</b> <code>" + sentMessages + " Messages</code>"
+      });
+    }
+
+    // ================= 15. BULK DM / AUTO MESSAGE SENDER =================
+    if (action === "bulk_dm") {
+      const recipientList = String(body.targets || "")
+        .split(/\r?\n|,/)
+        .map(function (u) {
+          return u.trim();
+        })
+        .filter(Boolean);
+      const dmText = String(body.messageText || "").trim();
+      const dmMode = body.dmMode || "round_robin";
+
+      if (recipientList.length === 0 || !dmText) {
+        return res.status(200).json({ reply: "⚠️ <b>Enter Target Recipients and DM Message!</b>" });
+      }
+
+      let dmSent = 0;
+      let dmFailed = 0;
+
+      if (dmMode === "all_to_all") {
+        await Promise.allSettled(
+          targetAccounts.map(function (acc) {
+            return withTimeout(
+              (async function () {
+                const client = await connectAccountClient(acc);
+                try {
+                  for (let r = 0; r < recipientList.length; r++) {
+                    try {
+                      await client.sendMessage(recipientList[r], { message: dmText });
+                      dmSent++;
+                    } catch (e) {
+                      dmFailed++;
+                    }
+                  }
+                } finally {
+                  fastDisconnect(client);
+                }
+              })(),
+              9500
+            );
+          })
+        );
+      } else {
+        // Smart Round-Robin distribution across selected accounts
+        await Promise.allSettled(
+          targetAccounts.map(function (acc, accIdx) {
+            return withTimeout(
+              (async function () {
+                const myTargets = recipientList.filter(function (_, rIdx) {
+                  return rIdx % targetAccounts.length === accIdx;
+                });
+                if (myTargets.length === 0) return;
+
+                const client = await connectAccountClient(acc);
+                try {
+                  for (let r = 0; r < myTargets.length; r++) {
+                    try {
+                      await client.sendMessage(myTargets[r], { message: dmText });
+                      dmSent++;
+                    } catch (e) {
+                      dmFailed++;
+                    }
+                  }
+                } finally {
+                  fastDisconnect(client);
+                }
+              })(),
+              9500
+            );
+          })
+        );
+      }
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   📩 <b>BULK DM CAMPAIGN COMPLETED!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "👥 <b>Target Users:</b> <code>" + recipientList.length + "</code>\n" +
+          "🟢 <b>DMs Delivered:</b> <code>" + dmSent + " Messages</code>\n" +
+          "🔴 <b>Failed / Privacy Restricted:</b> <code>" + dmFailed + "</code>"
+      });
+    }
+
+    // ================= 16. AUTO JOIN CHANNEL (SELECTED IDs) =================
     if (action === "join") {
       const channelInput = String(input || "").trim();
       let title = channelInput;
@@ -2158,43 +3419,39 @@ module.exports = async (req, res) => {
       let failCount = 0;
 
       await Promise.allSettled(
-        accounts.map(async function (acc) {
-          const useApiId = Number(acc.apiId || defaultApiConfig.apiId);
-          const useApiHash = String(acc.apiHash || defaultApiConfig.apiHash);
-
-          const client = new TelegramClient(
-            new StringSession(acc.session),
-            useApiId,
-            useApiHash,
-            { connectionRetries: 2 }
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                if (channelInput.indexOf("+") !== -1 || channelInput.indexOf("joinchat/") !== -1) {
+                  let hash = channelInput.split("+").pop().split("joinchat/").pop().replace("/", "").trim();
+                  const result = await client.invoke(new Api.messages.ImportChatInvite({ hash: hash }));
+                  if (result.chats && result.chats[0]) {
+                    title = result.chats[0].title;
+                    targetId = "-100" + result.chats[0].id.toString();
+                  }
+                } else {
+                  let cleanUsername = channelInput.replace("https://t.me/", "").replace("@", "").split("/")[0].trim();
+                  const result = await client.invoke(new Api.channels.JoinChannel({ channel: cleanUsername }));
+                  if (result.chats && result.chats[0]) {
+                    title = result.chats[0].title;
+                    targetId = result.chats[0].username ? "@" + result.chats[0].username : "-100" + result.chats[0].id.toString();
+                  }
+                }
+                successCount++;
+              } catch (e) {
+                if (e.message && e.message.indexOf("USER_ALREADY_PARTICIPANT") !== -1) {
+                  successCount++;
+                } else {
+                  failCount++;
+                }
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8500
           );
-          try {
-            await client.connect();
-            if (channelInput.indexOf("+") !== -1 || channelInput.indexOf("joinchat/") !== -1) {
-              let hash = channelInput.split("+").pop().split("joinchat/").pop().replace("/", "").trim();
-              const result = await client.invoke(new Api.messages.ImportChatInvite({ hash: hash }));
-              if (result.chats && result.chats[0]) {
-                title = result.chats[0].title;
-                targetId = "-100" + result.chats[0].id.toString();
-              }
-            } else {
-              let cleanUsername = channelInput.replace("https://t.me/", "").replace("@", "").split("/")[0].trim();
-              const result = await client.invoke(new Api.channels.JoinChannel({ channel: cleanUsername }));
-              if (result.chats && result.chats[0]) {
-                title = result.chats[0].title;
-                targetId = result.chats[0].username ? "@" + result.chats[0].username : "-100" + result.chats[0].id.toString();
-              }
-            }
-            successCount++;
-          } catch (e) {
-            if (e.message && e.message.indexOf("USER_ALREADY_PARTICIPANT") !== -1) {
-              successCount++;
-            } else {
-              failCount++;
-            }
-          } finally {
-            fastDisconnect(client);
-          }
         })
       );
 
@@ -2204,7 +3461,7 @@ module.exports = async (req, res) => {
       let found = false;
       for (let i = 0; i < channels.length; i++) {
         if (channels[i].input === channelInput || channels[i].targetId === targetId) {
-          channels[i].status = "🟢 JOINED (" + successCount + "/" + accounts.length + " IDs)";
+          channels[i].status = "🟢 JOINED (" + successCount + "/" + targetAccounts.length + " IDs)";
           channels[i].title = title;
           found = true;
           break;
@@ -2216,7 +3473,7 @@ module.exports = async (req, res) => {
           title: title,
           input: channelInput,
           targetId: targetId,
-          status: "🟢 JOINED (" + successCount + "/" + accounts.length + " IDs)",
+          status: "🟢 JOINED (" + successCount + "/" + targetAccounts.length + " IDs)",
           date: new Date().toLocaleDateString("en-IN")
         });
       }
@@ -2231,22 +3488,16 @@ module.exports = async (req, res) => {
           "╚════════════════════════════╝\n\n" +
           "📢 <b>Channel Name:</b> " + title + "\n" +
           "🔗 <b>Channel Link:</b> <code>" + channelInput + "</code>\n" +
-          "🟢 <b>Joined Accounts:</b> <code>" + successCount + " / " + accounts.length + " IDs</code>\n" +
+          "🟢 <b>Joined Accounts:</b> <code>" + successCount + " / " + targetAccounts.length + " IDs</code>\n" +
           "🔴 <b>Failed Accounts:</b> <code>" + failCount + " IDs</code>"
       });
     }
 
-    // ================= 6. LEAVE MENU =================
+    // ================= 17. LEAVE MENU & AUTO LEAVE CHANNEL =================
     if (action === "leave_menu") {
       let channels = (await fbGet("panel/channels")) || [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
-
-      if (channels.length === 0) {
-        return res.status(200).json({
-          nextStep: "",
-          reply: "📭 <b>No Channels Found!</b>"
-        });
-      }
+      if (channels.length === 0) return res.status(200).json({ nextStep: "", reply: "📭 <b>No Channels Found!</b>" });
 
       let msg = "📤 <b>SELECT CHANNEL TO LEAVE</b>\n\n";
       for (let i = 0; i < channels.length; i++) {
@@ -2256,46 +3507,37 @@ module.exports = async (req, res) => {
       return res.status(200).json({ nextStep: "wait_leave", reply: msg });
     }
 
-    // ================= 7. AUTO LEAVE CHANNEL =================
     if (action === "leave") {
       const index = parseInt(String(input || "").trim(), 10) - 1;
       let channels = (await fbGet("panel/channels")) || [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
 
       if (isNaN(index) || !channels[index]) {
-        return res.status(200).json({
-          nextStep: "",
-          reply: "❌ <b>Invalid Channel Number!</b>"
-        });
+        return res.status(200).json({ nextStep: "", reply: "❌ <b>Invalid Channel Number!</b>" });
       }
 
       const targetChannel = channels[index];
       let leftCount = 0;
 
       await Promise.allSettled(
-        accounts.map(async function (acc) {
-          const useApiId = Number(acc.apiId || defaultApiConfig.apiId);
-          const useApiHash = String(acc.apiHash || defaultApiConfig.apiHash);
-
-          const client = new TelegramClient(
-            new StringSession(acc.session),
-            useApiId,
-            useApiHash,
-            { connectionRetries: 2 }
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                let cleanTarget = targetChannel.targetId.replace("https://t.me/", "").trim();
+                await client.invoke(new Api.channels.LeaveChannel({ channel: cleanTarget }));
+                leftCount++;
+              } finally {
+                fastDisconnect(client);
+              }
+            })(),
+            8000
           );
-          try {
-            await client.connect();
-            let cleanTarget = targetChannel.targetId.replace("https://t.me/", "").trim();
-            await client.invoke(new Api.channels.LeaveChannel({ channel: cleanTarget }));
-            leftCount++;
-          } catch (e) {
-          } finally {
-            fastDisconnect(client);
-          }
         })
       );
 
-      channels[index].status = "🔴 LEFT (" + leftCount + "/" + accounts.length + " IDs)";
+      channels[index].status = "🔴 LEFT (" + leftCount + "/" + targetAccounts.length + " IDs)";
       await fbSet("panel/channels", channels);
 
       return res.status(200).json({
@@ -2305,21 +3547,15 @@ module.exports = async (req, res) => {
           "   📤 <b>MULTI-ID AUTO LEAVE DONE!</b>\n" +
           "╚════════════════════════════╝\n\n" +
           "📢 <b>Channel Name:</b> " + targetChannel.title + "\n" +
-          "🔴 <b>Left Accounts:</b> <code>" + leftCount + " / " + accounts.length + " IDs</code>"
+          "🔴 <b>Left Accounts:</b> <code>" + leftCount + " / " + targetAccounts.length + " IDs</code>"
       });
     }
 
-    // ================= 8. CHANNEL LIST =================
+    // ================= 18. CHANNEL LIST =================
     if (action === "list") {
       let channels = (await fbGet("panel/channels")) || [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
-
-      if (channels.length === 0) {
-        return res.status(200).json({
-          nextStep: "",
-          reply: "📭 <b>No channels tracked yet!</b>"
-        });
-      }
+      if (channels.length === 0) return res.status(200).json({ nextStep: "", reply: "📭 <b>No channels tracked yet!</b>" });
 
       let msg = "📋 <b>REGISTERED CHANNELS & STATUS</b>\n\n";
       for (let i = 0; i < channels.length; i++) {
