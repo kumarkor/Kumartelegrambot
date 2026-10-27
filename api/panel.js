@@ -1,17 +1,9 @@
 const { initializeApp, getApps } = require("firebase/app");
-const { getDatabase, ref, get, set, update } = require("firebase/database");
+const { getDatabase, ref, get, set } = require("firebase/database");
 const { TelegramClient, Api } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 
-// ====================================================
-// 1. इथे तुमचा मिळालेला API_ID आणि API_HASH टाका
-// ====================================================
-const API_ID = 12345678; // <-- इथे तुमचा api_id आकडा टाका (कोट्स नको)
-const API_HASH = "a1b2c3d4e5f6..."; // <-- इथे तुमचा api_hash टाका
-
-// ====================================================
-// 2. तुमचा Firebase Configuration (जोडलेला आहे)
-// ====================================================
+// तुमचा Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBEADAZC32ZbDyg3Fhl73KMZgQJ2meDHXs",
   authDomain: "kumartelegrambot.firebaseapp.com",
@@ -27,16 +19,49 @@ const db = getDatabase(app);
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
-    return res.status(200).json({ reply: "✅ Telegram Control Panel API Active!" });
+    return res.status(200).json({ reply: "✅ Multi-Account Control Panel API Active!" });
   }
 
-  const { action, input } = req.body;
+  const { action, input, apiId, apiHash } = req.body;
 
   try {
-    // ================= 1. SEND OTP (ACCOUNT LOGIN) =================
+    // ================= 1. SAVE API_ID & API_HASH FROM BOT =================
+    if (action === "save_api") {
+      const cleanId = parseInt(String(apiId).replace(/\D/g, ""), 10);
+      const cleanHash = String(apiHash).replace(/[^a-zA-Z0-9]/g, "").trim();
+
+      if (!cleanId || cleanHash.length < 20) {
+        return res.status(200).json({
+          nextStep: "",
+          reply: "❌ <b>चुकीचा API ID किंवा API Hash!</b>\nकृपया my.telegram.org वरील बरोबर माहिती टाका."
+        });
+      }
+
+      await set(ref(db, "panel/api_config"), {
+        apiId: cleanId,
+        apiHash: cleanHash
+      });
+
+      return res.status(200).json({
+        nextStep: "",
+        reply: "✅ <b>API ID आणि API HASH सेव्ह झाले!</b>\n\n🔢 <b>API ID:</b> <code>" + cleanId + "</code>\n🔑 <b>API Hash:</b> <code>" + cleanHash + "</code>\n\nआता तुम्ही <b>➕ ADD ACCOUNT</b> दाबून तुमचे ११ Telegram IDs एक-एक करून जोडू शकता!"
+      });
+    }
+
+    // ================= CHECK API CONFIG IN FIREBASE =================
+    const apiSnap = await get(ref(db, "panel/api_config"));
+    if (!apiSnap.exists()) {
+      return res.status(200).json({
+        nextStep: "",
+        reply: "⚠️ <b>आधी API सेट करा!</b>\nखालील <b>⚙️ SET API ID/HASH</b> बटनावर क्लिक करून तुमचा API ID आणि API Hash टाका."
+      });
+    }
+    const { apiId: SAVED_API_ID, apiHash: SAVED_API_HASH } = apiSnap.val();
+
+    // ================= 2. SEND OTP (ADD NEW ACCOUNT) =================
     if (action === "send_code") {
-      const phone = input.trim();
-      const client = new TelegramClient(new StringSession(""), Number(API_ID), API_HASH, {
+      const phone = input.replace(/\s+/g, "").trim();
+      const client = new TelegramClient(new StringSession(""), Number(SAVED_API_ID), SAVED_API_HASH, {
         connectionRetries: 3,
       });
       await client.connect();
@@ -44,8 +69,8 @@ module.exports = async (req, res) => {
       const result = await client.invoke(
         new Api.auth.SendCode({
           phoneNumber: phone,
-          apiId: Number(API_ID),
-          apiHash: API_HASH,
+          apiId: Number(SAVED_API_ID),
+          apiHash: SAVED_API_HASH,
           settings: new Api.CodeSettings({}),
         })
       );
@@ -60,23 +85,23 @@ module.exports = async (req, res) => {
       await client.disconnect();
       return res.status(200).json({
         nextStep: "wait_otp",
-        reply: "📩 <b>OTP पाठवला आहे!</b>\n\nतुमच्या Telegram वर आलेला ५ अंकी OTP पाठवा.\n⚠️ <b>महत्त्वाचे:</b> OTP पाठवताना अंकांमध्ये स्पेस द्या (उदा. OTP <code>12345</code> असेल तर <code>1 2 3 4 5</code> असा पाठवा, नाहीतर Telegram कोड ब्लॉक करतो)."
+        reply: "📩 <b>OTP पाठवला आहे!</b> (<code>" + phone + "</code>)\n\nतुमच्या Telegram वर आलेला ५ अंकी OTP <b>स्पेस देऊन</b> पाठवा:\nउदा. <code>1 2 3 4 5</code>"
       });
     }
 
-    // ================= 2. VERIFY OTP & SAVE SESSION =================
+    // ================= 3. VERIFY OTP & SAVE TO MULTI-ACCOUNT LIST =================
     if (action === "verify_code") {
       const code = input.replace(/\D/g, "");
       const snap = await get(ref(db, "panel/auth_temp"));
       if (!snap.exists()) {
         return res.status(200).json({
           nextStep: "",
-          reply: "❌ सेशन सापडले नाही. पुन्हा <b>🔐 ACCOUNT LOGIN</b> वर क्लिक करा."
+          reply: "❌ सेशन संपले आहे. पुन्हा <b>➕ ADD ACCOUNT</b> वर क्लिक करा."
         });
       }
 
       const { phone, phoneCodeHash, tempSession } = snap.val();
-      const client = new TelegramClient(new StringSession(tempSession), Number(API_ID), API_HASH, {
+      const client = new TelegramClient(new StringSession(tempSession), Number(SAVED_API_ID), SAVED_API_HASH, {
         connectionRetries: 3,
       });
       await client.connect();
@@ -91,62 +116,117 @@ module.exports = async (req, res) => {
 
       const finalSession = client.session.save();
       const me = await client.getMe();
-
-      await set(ref(db, "panel/account"), {
-        phone: phone,
-        name: me.firstName || "User",
-        username: me.username || "",
-        session: finalSession,
-        loginTime: new Date().toLocaleString("en-IN")
-      });
-
       await client.disconnect();
-      return res.status(200).json({
-        nextStep: "",
-        reply: "✅ <b>Account Successfully Connected!</b>\n\n👤 <b>Name:</b> " + (me.firstName || "User") + "\n📱 <b>Phone:</b> <code>" + phone + "</code>\n\nआता तुम्ही चॅनेल ऑटोमॅटिक Join आणि Leave करू शकता!"
-      });
-    }
 
-    // ================= CHECK LOGGED IN SESSION =================
-    const accSnap = await get(ref(db, "panel/account"));
-    if (!accSnap.exists() || !accSnap.val().session) {
-      return res.status(200).json({
-        nextStep: "",
-        reply: "⚠️ <b>अकाउंट लॉगिन नाही!</b>\nआधी खालील <b>🔐 ACCOUNT LOGIN</b> बटनावर दाबून तुमचे Telegram अकाउंट कनेक्ट करा."
-      });
-    }
-    const accountData = accSnap.val();
+      // Save in accounts list
+      const accSnap = await get(ref(db, "panel/accounts"));
+      let accounts = accSnap.exists() ? accSnap.val() : [];
+      if (!Array.isArray(accounts)) accounts = Object.values(accounts);
 
-    // ================= 3. AUTO JOIN CHANNEL =================
-    if (action === "join") {
-      const channelInput = input.trim();
-      const client = new TelegramClient(new StringSession(accountData.session), Number(API_ID), API_HASH, {
-        connectionRetries: 3,
-      });
-      await client.connect();
-
-      let title = channelInput;
-      let targetId = channelInput;
-
-      if (channelInput.indexOf("+") !== -1 || channelInput.indexOf("joinchat/") !== -1) {
-        let hash = channelInput.split("+").pop().split("joinchat/").pop().replace("/", "").trim();
-        const result = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-        if (result.chats && result.chats[0]) {
-          title = result.chats[0].title;
-          targetId = "-100" + result.chats[0].id.toString();
-        }
-      } else {
-        let cleanUsername = channelInput.replace("https://t.me/", "").replace("@", "").split("/")[0].trim();
-        const result = await client.invoke(new Api.channels.JoinChannel({ channel: cleanUsername }));
-        if (result.chats && result.chats[0]) {
-          title = result.chats[0].title;
-          targetId = result.chats[0].username ? "@" + result.chats[0].username : "-100" + result.chats[0].id.toString();
+      // Update if phone already exists, else push new
+      let exists = false;
+      for (let i = 0; i < accounts.length; i++) {
+        if (accounts[i].phone === phone) {
+          accounts[i].session = finalSession;
+          accounts[i].name = me.firstName || "User";
+          exists = true;
+          break;
         }
       }
 
-      await client.disconnect();
+      if (!exists) {
+        accounts.push({
+          phone: phone,
+          name: me.firstName || "User",
+          username: me.username || "",
+          session: finalSession,
+          addedOn: new Date().toLocaleDateString("en-IN")
+        });
+      }
 
-      // Save to Firebase
+      await set(ref(db, "panel/accounts"), accounts);
+
+      return res.status(200).json({
+        nextStep: "",
+        reply: "✅ <b>Account Successfully Added!</b>\n\n👤 <b>Name:</b> " + (me.firstName || "User") + "\n📱 <b>Phone:</b> <code>" + phone + "</code>\n📊 <b>Total Connected IDs:</b> " + accounts.length + "\n\nदुसरा ID जोडण्यासाठी पुन्हा <b>➕ ADD ACCOUNT</b> दाबा!"
+      });
+    }
+
+    // ================= LOAD ALL CONNECTED ACCOUNTS =================
+    const accSnap = await get(ref(db, "panel/accounts"));
+    let accounts = accSnap.exists() ? accSnap.val() : [];
+    if (!Array.isArray(accounts)) accounts = Object.values(accounts);
+
+    // ================= 4. MY ACCOUNTS LIST =================
+    if (action === "my_accounts") {
+      if (accounts.length === 0) {
+        return res.status(200).json({
+          nextStep: "",
+          reply: "📭 <b>कोणतेही Telegram Account जोडलेले नाही!</b>\n<b>➕ ADD ACCOUNT</b> दाबून तुमचे ११ अकाउंट्स जोडा."
+        });
+      }
+
+      let msg = "<b>📱 CONNECTED TELEGRAM ACCOUNTS (" + accounts.length + ")</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n";
+      for (let i = 0; i < accounts.length; i++) {
+        msg += "<b>" + (i + 1) + ". " + accounts[i].name + "</b> — <code>" + accounts[i].phone + "</code>\n";
+      }
+      msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n✅ हे सर्व IDs एकाच क्लिकवर चॅनेल Join आणि Leave करतील.";
+      return res.status(200).json({ nextStep: "", reply: msg });
+    }
+
+    if (accounts.length === 0) {
+      return res.status(200).json({
+        nextStep: "",
+        reply: "⚠️ <b>कोणताही ID लॉगिन नाही!</b>\nआधी <b>➕ ADD ACCOUNT</b> दाबून किमान १ Telegram ID जोडा."
+      });
+    }
+
+    // ================= 5. AUTO JOIN FROM ALL ACCOUNTS =================
+    if (action === "join") {
+      const channelInput = input.trim();
+      let title = channelInput;
+      let targetId = channelInput;
+      let successCount = 0;
+      let failCount = 0;
+
+      // Join across all accounts in parallel
+      await Promise.allSettled(
+        accounts.map(async (acc) => {
+          const client = new TelegramClient(new StringSession(acc.session), Number(SAVED_API_ID), SAVED_API_HASH, {
+            connectionRetries: 2,
+          });
+          try {
+            await client.connect();
+            if (channelInput.indexOf("+") !== -1 || channelInput.indexOf("joinchat/") !== -1) {
+              let hash = channelInput.split("+").pop().split("joinchat/").pop().replace("/", "").trim();
+              const result = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+              if (result.chats && result.chats[0]) {
+                title = result.chats[0].title;
+                targetId = "-100" + result.chats[0].id.toString();
+              }
+            } else {
+              let cleanUsername = channelInput.replace("https://t.me/", "").replace("@", "").split("/")[0].trim();
+              const result = await client.invoke(new Api.channels.JoinChannel({ channel: cleanUsername }));
+              if (result.chats && result.chats[0]) {
+                title = result.chats[0].title;
+                targetId = result.chats[0].username ? "@" + result.chats[0].username : "-100" + result.chats[0].id.toString();
+              }
+            }
+            successCount++;
+          } catch (e) {
+            // जर आधीच मेंबर असेल तरी सक्सेस धरा
+            if (e.message && e.message.indexOf("USER_ALREADY_PARTICIPANT") !== -1) {
+              successCount++;
+            } else {
+              failCount++;
+            }
+          } finally {
+            await client.disconnect();
+          }
+        })
+      );
+
+      // Save channel to Firebase
       const listSnap = await get(ref(db, "panel/channels"));
       let channels = listSnap.exists() ? listSnap.val() : [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
@@ -154,7 +234,7 @@ module.exports = async (req, res) => {
       let found = false;
       for (let i = 0; i < channels.length; i++) {
         if (channels[i].input === channelInput || channels[i].targetId === targetId) {
-          channels[i].status = "🟢 Joined";
+          channels[i].status = "🟢 Joined (" + successCount + "/" + accounts.length + " IDs)";
           channels[i].title = title;
           found = true;
           break;
@@ -166,8 +246,8 @@ module.exports = async (req, res) => {
           title: title,
           input: channelInput,
           targetId: targetId,
-          status: "🟢 Joined",
-          date: new Date().toLocaleDateString("en-IN")
+          status: "🟢 Joined (" + successCount + "/" + accounts.length + " IDs)",
+          active: true
         });
       }
 
@@ -175,41 +255,38 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({
         nextStep: "",
-        reply: "✅ <b>CHANNEL JOINED AUTOMATICALLY!</b>\n\n📢 <b>Name:</b> " + title + "\n🔗 <b>Link:</b> <code>" + channelInput + "</code>\n📊 <b>Status:</b> 🟢 Joined"
+        reply: "✅ <b>AUTO JOIN COMPLETED!</b>\n\n📢 <b>Channel:</b> " + title + "\n🔗 <b>Link:</b> <code>" + channelInput + "</code>\n🟢 <b>Joined IDs:</b> " + successCount + " / " + accounts.length + "\n🔴 <b>Failed IDs:</b> " + failCount
       });
     }
 
-    // ================= 4. SHOW LEAVE MENU =================
+    // ================= 6. LEAVE MENU =================
     if (action === "leave_menu") {
       const listSnap = await get(ref(db, "panel/channels"));
       let channels = listSnap.exists() ? listSnap.val() : [];
       if (!Array.isArray(channels)) channels = Object.values(channels);
 
-      let msg = "<b>📤 LEAVE CHANNEL</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n";
-      let activeCount = 0;
+      let msg = "<b>📤 LEAVE CHANNEL (ALL IDs)</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n";
+      let count = 0;
 
       for (let i = 0; i < channels.length; i++) {
-        if (channels[i].status === "🟢 Joined") {
-          activeCount++;
+        if (channels[i].status.indexOf("🟢") !== -1) {
+          count++;
           msg += "<b>" + (i + 1) + ".</b> " + channels[i].title + " (<code>" + channels[i].input + "</code>)\n";
         }
       }
 
-      if (activeCount === 0) {
+      if (count === 0) {
         return res.status(200).json({
           nextStep: "",
-          reply: "📭 <b>सध्या कोणतेही Active Joined चॅनेल नाही!</b>"
+          reply: "📭 <b>सध्या कोणतेही Joined चॅनेल नाही!</b>"
         });
       }
 
-      msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n👉 ज्या चॅनेलमधून बाहेर पडायचे आहे त्याचा <b>नंबर (उदा. 1, 2)</b> पाठवा:";
-      return res.status(200).json({
-        nextStep: "wait_leave",
-        reply: msg
-      });
+      msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n👉 सर्व अकाउंट्समधून बाहेर पडण्यासाठी चॅनेलचा <b>नंबर (उदा. 1, 2)</b> पाठवा:";
+      return res.status(200).json({ nextStep: "wait_leave", reply: msg });
     }
 
-    // ================= 5. AUTO LEAVE CHANNEL =================
+    // ================= 7. AUTO LEAVE FROM ALL ACCOUNTS =================
     if (action === "leave") {
       const index = parseInt(input.trim()) - 1;
       const listSnap = await get(ref(db, "panel/channels"));
@@ -224,25 +301,36 @@ module.exports = async (req, res) => {
       }
 
       const targetChannel = channels[index];
-      const client = new TelegramClient(new StringSession(accountData.session), Number(API_ID), API_HASH, {
-        connectionRetries: 3,
-      });
-      await client.connect();
+      let leftCount = 0;
 
-      let cleanTarget = targetChannel.targetId.replace("https://t.me/", "").trim();
-      await client.invoke(new Api.channels.LeaveChannel({ channel: cleanTarget }));
-      await client.disconnect();
+      await Promise.allSettled(
+        accounts.map(async (acc) => {
+          const client = new TelegramClient(new StringSession(acc.session), Number(SAVED_API_ID), SAVED_API_HASH, {
+            connectionRetries: 2,
+          });
+          try {
+            await client.connect();
+            let cleanTarget = targetChannel.targetId.replace("https://t.me/", "").trim();
+            await client.invoke(new Api.channels.LeaveChannel({ channel: cleanTarget }));
+            leftCount++;
+          } catch (e) {
+            // ignore error if already left
+          } finally {
+            await client.disconnect();
+          }
+        })
+      );
 
-      channels[index].status = "🔴 Left";
+      channels[index].status = "🔴 Left (" + leftCount + "/" + accounts.length + " IDs)";
       await set(ref(db, "panel/channels"), channels);
 
       return res.status(200).json({
         nextStep: "",
-        reply: "✅ <b>CHANNEL LEFT AUTOMATICALLY!</b>\n\n📢 <b>Name:</b> " + targetChannel.title + "\n🔗 <b>Link:</b> <code>" + targetChannel.input + "</code>\n📊 <b>Status:</b> 🔴 Left"
+        reply: "✅ <b>AUTO LEAVE COMPLETED!</b>\n\n📢 <b>Channel:</b> " + targetChannel.title + "\n📤 <b>Left from IDs:</b> " + leftCount + " / " + accounts.length
       });
     }
 
-    // ================= 6. CHANNEL LIST =================
+    // ================= 8. CHANNEL LIST =================
     if (action === "list") {
       const listSnap = await get(ref(db, "panel/channels"));
       let channels = listSnap.exists() ? listSnap.val() : [];
@@ -251,12 +339,12 @@ module.exports = async (req, res) => {
       if (channels.length === 0) {
         return res.status(200).json({
           nextStep: "",
-          reply: "<b>📋 CHANNEL LIST</b>\n\nसध्या Firebase मध्ये कोणतेही चॅनेल नोंदवलेले नाही."
+          reply: "<b>📋 CHANNEL LIST</b>\n\nसध्या कोणतेही चॅनेल नोंदवलेले नाही."
         });
       }
 
       let msg = "<b>📋 REGISTERED CHANNELS & STATUS</b>\n" +
-                "👤 <b>Active Account:</b> " + accountData.name + " (<code>" + accountData.phone + "</code>)\n" +
+                "📱 <b>Total Connected IDs:</b> " + accounts.length + "\n" +
                 "━━━━━━━━━━━━━━━━━━━━━━\n\n";
 
       for (let i = 0; i < channels.length; i++) {
@@ -265,15 +353,10 @@ module.exports = async (req, res) => {
                "   📌 Status: <b>" + channels[i].status + "</b>\n\n";
       }
 
-      msg += "━━━━━━━━━━━━━━━━━━━━━━\n📊 <b>Total Channels:</b> " + channels.length;
-
-      return res.status(200).json({
-        nextStep: "",
-        reply: msg
-      });
+      return res.status(200).json({ nextStep: "", reply: msg });
     }
 
-    return res.status(200).json({ nextStep: "", reply: "⚠️ Unknown command action." });
+    return res.status(200).json({ nextStep: "", reply: "⚠️ Unknown action." });
 
   } catch (err) {
     return res.status(200).json({
