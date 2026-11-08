@@ -31,10 +31,16 @@ async function fbSet(path, data) {
   }
 }
 
-function fastDisconnect(client) {
+// SAFE DISCONNECT: Uses disconnect() instead of abrupt destroy() so Telegram NEVER logs out the session!
+async function safeDisconnect(client) {
   try {
     if (client) {
-      client.destroy().catch(function () {});
+      await Promise.race([
+        client.disconnect(),
+        new Promise(function (resolve) {
+          setTimeout(resolve, 1200);
+        })
+      ]);
     }
   } catch (e) {}
 }
@@ -261,9 +267,9 @@ function renderMasterWebPanel() {
     }
 
     /* ========================================================================
-       1. SECURITY VAULT LOCK SCREEN (PIN: 252010)
+       1. SECURITY VAULT LOCK SCREEN & REJOIN PIN MODAL (PIN: 252010)
        ======================================================================== */
-    #vault-overlay {
+    #vault-overlay, #rejoin-modal-overlay {
       position: fixed;
       inset: 0;
       z-index: 99999;
@@ -275,7 +281,7 @@ function renderMasterWebPanel() {
       transition: opacity 0.35s ease, visibility 0.35s ease;
     }
 
-    #vault-overlay.vault-open {
+    #vault-overlay.vault-open, #rejoin-modal-overlay.vault-open {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
@@ -283,7 +289,7 @@ function renderMasterWebPanel() {
 
     .vault-container {
       width: 100%;
-      max-width: 420px;
+      max-width: 440px;
       background: rgba(16, 8, 36, 0.96);
       border: 2px solid var(--border-strong);
       border-radius: 28px;
@@ -292,6 +298,8 @@ function renderMasterWebPanel() {
       text-align: center;
       position: relative;
       overflow: hidden;
+      max-height: 92vh;
+      overflow-y: auto;
     }
 
     .vault-crown-badge {
@@ -313,7 +321,7 @@ function renderMasterWebPanel() {
 
     .vault-heading {
       font-family: 'Cinzel', serif;
-      font-size: 23px;
+      font-size: 22px;
       font-weight: 900;
       background: var(--gradient-royal);
       -webkit-background-clip: text;
@@ -460,7 +468,7 @@ function renderMasterWebPanel() {
     .master-shell {
       position: relative;
       z-index: 1;
-      max-width: 1240px;
+      max-width: 1260px;
       margin: 0 auto;
       padding: 16px 14px 100px;
     }
@@ -728,13 +736,6 @@ function renderMasterWebPanel() {
       margin-bottom: 16px;
     }
 
-    .three-col-layout {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
     .glass-panel {
       background: var(--bg-card);
       border: 1px solid var(--border-glass);
@@ -940,7 +941,8 @@ function renderMasterWebPanel() {
       font-family: 'JetBrains Mono', monospace;
       font-size: 13px;
       color: #ffffff;
-      line-height: 1.6;
+      line-height: 1.65;
+      white-space: pre-wrap;
     }
 
     /* ========================================================================
@@ -1102,6 +1104,60 @@ function renderMasterWebPanel() {
   </div>
 
   <!-- ======================================================================
+       1B. 1-CLICK REJOIN / RE-LOGIN MODAL (AUTO-FILLS API_ID + API_HASH + PHONE)
+       ====================================================================== -->
+  <div id="rejoin-modal-overlay" class="vault-open">
+    <div class="vault-container" style="text-align:left;">
+      <div style="text-align:center;">
+        <div class="vault-crown-badge">🔄 QUICK REJOIN / RE-LOGIN ID 🔄</div>
+        <div class="vault-heading" style="font-size:19px;">RECONNECT TELEGRAM ID</div>
+        <div class="vault-subtext" id="rejoin-sub-label">API_ID & API_HASH Auto-Loaded!</div>
+      </div>
+
+      <div class="field-block">
+        <div class="field-title"><label>PHONE NUMBER</label><span>SAVED</span></div>
+        <input type="text" id="rejoin-phone" class="royal-input" readonly />
+      </div>
+
+      <div class="field-block">
+        <div class="field-title"><label>DEDICATED API_ID</label><span>SAVED</span></div>
+        <input type="text" id="rejoin-api-id" class="royal-input" />
+      </div>
+
+      <div class="field-block">
+        <div class="field-title"><label>DEDICATED 32-CHAR API_HASH</label><span>FULL VISIBLE</span></div>
+        <input type="text" id="rejoin-api-hash" class="royal-input" />
+      </div>
+
+      <button type="button" class="action-btn btn-gold" id="btn-rejoin-send-otp">
+        📩 1. SEND LOGIN OTP TO THIS ID NOW
+      </button>
+
+      <div class="field-block" style="margin-top:10px;">
+        <div class="field-title"><label>ENTER 5-DIGIT TELEGRAM OTP</label><span>STEP 2</span></div>
+        <input type="tel" id="rejoin-otp-code" class="royal-input" placeholder="Enter 5-digit OTP code" />
+      </div>
+
+      <button type="button" class="action-btn btn-emerald" id="btn-rejoin-verify-otp">
+        ✅ 2. VERIFY OTP & REJOIN ID
+      </button>
+
+      <div class="field-block" style="margin-top:10px;">
+        <div class="field-title"><label>2FA CLOUD PASSWORD (IF ENABLED)</label><span>STEP 3</span></div>
+        <input type="text" id="rejoin-2fa-pass" class="royal-input" placeholder="Enter 2FA Password (if required)" />
+      </div>
+
+      <button type="button" class="action-btn btn-royal-purple" id="btn-rejoin-verify-2fa">
+        🔐 3. VERIFY 2FA PASSWORD & SAVE
+      </button>
+
+      <button type="button" class="action-btn btn-ghost" id="btn-close-rejoin-modal" style="margin-top:6px;">
+        ✖ CLOSE REJOIN WINDOW
+      </button>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        2. MAIN ROYAL COMMAND CENTER DASHBOARD
        ====================================================================== -->
   <div class="master-shell">
@@ -1111,7 +1167,7 @@ function renderMasterWebPanel() {
         <div class="royal-emblem">👑</div>
         <div class="royal-title-block">
           <h1>TELEGRAM MASTER SMM & AUTOMATION SUITE</h1>
-          <p>11+ IDs • Auto Join/Leave • Views • Reactions • Comments • Polls • Referrals • OTP Reader • Bulk DM</p>
+          <p>15+ IDs • Anti-Logout Engine • Rejoin ID • Views • Reactions • Comments • Polls • OTP Reader</p>
         </div>
       </div>
       <div class="header-actions">
@@ -1131,7 +1187,7 @@ function renderMasterWebPanel() {
       <div class="metric-box">
         <div class="metric-tag">📱 Connected IDs</div>
         <div class="metric-num" id="metric-accounts">0</div>
-        <div class="metric-foot">🟢 Dedicated API_ID Engine</div>
+        <div class="metric-foot">🛡️ Anti-Logout Fingerprint</div>
       </div>
       <div class="metric-box">
         <div class="metric-tag">🎯 Selected IDs</div>
@@ -1146,7 +1202,7 @@ function renderMasterWebPanel() {
       <div class="metric-box">
         <div class="metric-tag">🟢 Online Heartbeat</div>
         <div class="metric-num" id="metric-online-state" style="color: var(--text-dim); font-size: 20px;">STANDBY</div>
-        <div class="metric-foot" id="metric-online-sub">🔄 Toggle in Tab 5</div>
+        <div class="metric-foot" id="metric-online-sub">🔄 Toggle in Tab 3</div>
       </div>
     </section>
 
@@ -1156,7 +1212,8 @@ function renderMasterWebPanel() {
         <div class="selector-title">
           🎯 TARGET ACCOUNT SELECTOR (CLICK TO SELECT / DESELECT ACCOUNTS FOR ANY ACTION)
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="action-btn btn-cyan btn-mini" id="btn-check-health">🩺 CHECK ALL IDs HEALTH</button>
           <button type="button" class="action-btn btn-emerald btn-mini" id="btn-select-all-accs">✅ SELECT ALL IDs</button>
           <button type="button" class="action-btn btn-ghost btn-mini" id="btn-deselect-all-accs">❌ CLEAR SELECTION</button>
         </div>
@@ -1184,7 +1241,7 @@ function renderMasterWebPanel() {
         📥 5. CHANNEL JOIN / LEAVE
       </button>
       <button type="button" class="cmd-tab" data-target="pane-accounts">
-        ➕ 6. ADD ID (API_ID & HASH)
+        ➕ 6. ADD / REJOIN ID (API_ID & HASH)
       </button>
     </div>
 
@@ -1197,7 +1254,7 @@ function renderMasterWebPanel() {
           <button type="button" class="action-btn btn-ghost btn-mini" id="btn-sync-now">🔄 REFRESH</button>
         </div>
       </div>
-      <div class="console-screen" id="console-box">👑 [QUANTUM SMM SUITE READY]: All 11+ Automation Modules Loaded! Select accounts above and launch any tool below.</div>
+      <div class="console-screen" id="console-box">👑 [QUANTUM SMM SUITE READY]: Anti-Logout Engine & Triple-Fallback 777000 OTP Reader Active!</div>
     </div>
 
     <!-- ====================================================================
@@ -1452,26 +1509,32 @@ function renderMasterWebPanel() {
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">📩 LIVE OTP / LOGIN CODE READER (777000)</div>
-            <span class="badge-chip">INSTANT OTP</span>
+            <span class="badge-chip">TRIPLE-FALLBACK FIXED</span>
           </div>
           <div class="helper-alert">
-            🔑 Select any connected Telegram account from the dropdown below (or choose <b>SCAN ALL SELECTED ACCOUNTS</b>) to read incoming Telegram login verification codes from <code>777000</code>!
+            🔑 Select any connected Telegram account below to read incoming Telegram login codes (`777000`). If an account is logged out, click <b>🔄 REJOIN / RE-LOGIN SELECTED ID</b> right below to reconnect it with its saved `API_ID` & `API_HASH`!
           </div>
           <div class="field-block">
             <div class="field-title">
-              <label>SELECT ACCOUNT TO READ OTP</label>
+              <label>SELECT ACCOUNT TO READ OTP OR REJOIN</label>
               <span>DROPDOWN</span>
             </div>
             <select id="sel-otp-account" class="royal-select">
               <option value="SELECTED">🔍 SCAN ALL SELECTED ACCOUNTS</option>
             </select>
           </div>
-          <button type="button" class="action-btn btn-gold" id="btn-read-otp">
-            📩 FETCH LATEST LOGIN OTP CODE NOW
-          </button>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button type="button" class="action-btn btn-gold" id="btn-read-otp">
+              📩 FETCH LATEST OTP CODE
+            </button>
+            <button type="button" class="action-btn btn-emerald" id="btn-rejoin-from-otp">
+              🔄 REJOIN / RE-LOGIN THIS ID
+            </button>
+          </div>
 
           <div class="otp-highlight-box" id="otp-reader-result">
-            📭 Select an account and click <b>FETCH LATEST LOGIN OTP CODE NOW</b> to view the 5-digit Telegram code here.
+            📭 Select an account and click <b>📩 FETCH LATEST OTP CODE</b> to read the 5-digit Telegram code, or click <b>🔄 REJOIN / RE-LOGIN THIS ID</b> if the session logged out.
           </div>
         </div>
 
@@ -1678,18 +1741,28 @@ function renderMasterWebPanel() {
     </div>
 
     <!-- ====================================================================
-         PANE 6: ADD TELEGRAM ID (PER-ACCOUNT API_ID + API_HASH + OTP + 2FA)
+         PANE 6: ADD / REJOIN TELEGRAM ID (FULL API_ID + API_HASH + OTP + 2FA)
          ==================================================================== -->
     <div id="pane-accounts" class="view-pane">
       <div class="helper-alert">
-        ⚡ <b>DEDICATED API_ID & API_HASH SYSTEM:</b> Enter each Telegram account's unique <code>API_ID</code>, <code>API_HASH</code>, and <code>Phone Number</code> below.
+        ⚡ <b>DEDICATED API_ID & API_HASH + 1-CLICK REJOIN SYSTEM:</b> Every account's `API_ID` and `API_HASH` is saved in Firebase. If any ID ever logs out, simply click <b>🔄 REJOIN / RE-LOGIN</b> next to that account in the table below — it will auto-fill the `API_ID`, `API_HASH`, and `Phone Number` so you only have to enter the OTP & 2FA password!
       </div>
 
       <div class="two-col-layout">
-        <div class="glass-panel">
+        <div class="glass-panel" id="add-account-form-panel">
           <div class="panel-top">
-            <div class="panel-heading">➕ ADD TELEGRAM ACCOUNT</div>
+            <div class="panel-heading">➕ ADD OR RE-LOGIN TELEGRAM ID</div>
             <span class="badge-chip">STEP 1 & 2</span>
+          </div>
+
+          <div class="field-block">
+            <div class="field-title">
+              <label>QUICK SELECT SAVED ID TO AUTO-FILL API_ID & HASH</label>
+              <span>OPTIONAL</span>
+            </div>
+            <select id="sel-quick-relogin" class="royal-select">
+              <option value="">-- Choose Saved Account to Re-Login or Type New Below --</option>
+            </select>
           </div>
 
           <div class="field-block">
@@ -1707,7 +1780,7 @@ function renderMasterWebPanel() {
 
           <div class="field-block">
             <div class="field-title">
-              <label>2. ACCOUNT APP API_HASH</label>
+              <label>2. ACCOUNT APP API_HASH (FULL 32-CHAR)</label>
               <span>*REQUIRED</span>
             </div>
             <input
@@ -1727,7 +1800,7 @@ function renderMasterWebPanel() {
               type="tel"
               id="inp-phone"
               class="royal-input"
-              placeholder="e.g. +919584967727"
+              placeholder="e.g. +919035114756"
             />
           </div>
 
@@ -1758,7 +1831,7 @@ function renderMasterWebPanel() {
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">🔐 2FA CLOUD PASSWORD</div>
-            <span class="badge-chip">100% FIXED</span>
+            <span class="badge-chip">AUTO-SAVED FOR REJOIN</span>
           </div>
 
           <div class="helper-alert" style="border-color: var(--accent-sec);">
@@ -1791,27 +1864,35 @@ function renderMasterWebPanel() {
             id="active-session-banner"
             style="background: var(--bg-input); border: 1px solid var(--border-glass); border-radius: 14px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-secondary);"
           >
-            No pending OTP session. Enter API_ID, API_HASH, and Phone on the left to start!
+            No pending OTP session. Select an account from Quick Select or click 🔄 REJOIN in the table below!
           </div>
         </div>
       </div>
 
       <div class="glass-panel">
         <div class="panel-top">
-          <div class="panel-heading">📱 CONNECTED TELEGRAM ACCOUNTS (11+ IDs HUB)</div>
+          <div class="panel-heading">📱 CONNECTED TELEGRAM ACCOUNTS (FULL API_ID & API_HASH + 1-CLICK REJOIN)</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="action-btn btn-gold btn-mini" id="btn-unlock-api-hashes">
+              🔐 SHOW FULL API_HASH & 2FA (PIN: 252010)
+            </button>
+            <button type="button" class="action-btn btn-cyan btn-mini" id="btn-check-health-table">
+              🩺 SCAN ALL IDs STATUS
+            </button>
+          </div>
         </div>
         <div class="table-scroll">
           <table class="royal-table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>NAME</th>
+                <th>NAME & STATUS</th>
                 <th>USERNAME</th>
                 <th>PHONE</th>
                 <th>DEDICATED API_ID</th>
                 <th>DEDICATED API_HASH</th>
-                <th>ADDED ON</th>
-                <th>ACTION</th>
+                <th>SAVED 2FA PASS</th>
+                <th>REJOIN / ACTION</th>
               </tr>
             </thead>
             <tbody id="tbody-accounts"></tbody>
@@ -1827,6 +1908,44 @@ function renderMasterWebPanel() {
        3. FRONTEND JAVASCRIPT ENGINE (GLITCH-FREE, NO HANG, MULTI-SELECTOR)
        ====================================================================== -->
   <script>
+    var globalAccountsList = [];
+
+    // Global helper so dynamically rendered buttons inside OTP Reader or Table can open Rejoin Modal
+    window.triggerAccountRejoin = function (phoneStr) {
+      var found = null;
+      for (var i = 0; i < globalAccountsList.length; i++) {
+        if (globalAccountsList[i].phone === phoneStr) {
+          found = globalAccountsList[i];
+          break;
+        }
+      }
+      if (!found) {
+        alert("Account not found: " + phoneStr);
+        return;
+      }
+      var askPin = prompt("🔐 Enter Master Password (252010) to view API_ID/API_HASH & Rejoin " + found.phone + ":", "252010");
+      if (askPin !== "252010") {
+        alert("❌ Invalid Password!");
+        return;
+      }
+
+      // Populate Quick Rejoin Modal AND Tab 6 Form
+      document.getElementById("rejoin-phone").value = found.phone || "";
+      document.getElementById("rejoin-api-id").value = found.apiId || "";
+      document.getElementById("rejoin-api-hash").value = found.apiHash || "";
+      document.getElementById("rejoin-2fa-pass").value = found.twoFaPassword || "";
+      document.getElementById("rejoin-otp-code").value = "";
+      document.getElementById("rejoin-sub-label").textContent =
+        "Reconnecting " + (found.name || "ID") + " (" + found.phone + ")";
+
+      document.getElementById("inp-api-id").value = found.apiId || "";
+      document.getElementById("inp-api-hash").value = found.apiHash || "";
+      document.getElementById("inp-phone").value = found.phone || "";
+      document.getElementById("inp-2fa").value = found.twoFaPassword || "";
+
+      document.getElementById("rejoin-modal-overlay").classList.remove("vault-open");
+    };
+
     (function () {
       var MASTER_PIN_CODE = "252010";
       var enteredPin = "";
@@ -1834,6 +1953,8 @@ function renderMasterWebPanel() {
       var channelsList = [];
       var selectedPhones = [];
       var chosenEmoji = "🔥";
+      var showFullApiHashes = false;
+      var accountHealthMap = {};
       var onlineHeartbeatTimer = null;
       var groupAdLoopTimer = null;
 
@@ -2045,6 +2166,7 @@ function renderMasterWebPanel() {
       function renderAccountSelectorChips() {
         var wrap = document.getElementById("account-selector-chips");
         var otpSel = document.getElementById("sel-otp-account");
+        var quickReloginSel = document.getElementById("sel-quick-relogin");
         if (!wrap) return;
 
         if (!accountsList.length) {
@@ -2053,7 +2175,6 @@ function renderMasterWebPanel() {
           return;
         }
 
-        // Default select all if empty on first load
         if (selectedPhones.length === 0) {
           for (var s = 0; s < accountsList.length; s++) {
             selectedPhones.push(accountsList[s].phone);
@@ -2073,14 +2194,29 @@ function renderMasterWebPanel() {
           if (currentOtpVal) otpSel.value = currentOtpVal;
         }
 
+        if (quickReloginSel) {
+          quickReloginSel.innerHTML = '<option value="">-- Choose Saved Account to Auto-Fill API_ID & API_HASH --</option>';
+          for (var q = 0; q < accountsList.length; q++) {
+            var optQ = document.createElement("option");
+            optQ.value = accountsList[q].phone;
+            optQ.textContent = "#" + (q + 1) + " " + (accountsList[q].name || "User") + " (" + accountsList[q].phone + ") — API_ID: " + (accountsList[q].apiId || "Saved");
+            quickReloginSel.appendChild(optQ);
+          }
+        }
+
         for (var i = 0; i < accountsList.length; i++) {
           (function (idx, acc) {
             var isSel = selectedPhones.indexOf(acc.phone) !== -1;
+            var hState = accountHealthMap[acc.phone];
             var chip = document.createElement("div");
             chip.className = "acc-chip" + (isSel ? " selected" : "");
+            if (hState === "LOGGED_OUT") {
+              chip.style.borderColor = "#f43f5e";
+              chip.style.background = "rgba(244,63,94,0.18)";
+            }
             chip.innerHTML =
-              '<span class="dot-ind"></span>' +
-              "<span>#" + (idx + 1) + " " + (acc.name || "ID") + " (" + acc.phone.slice(-4) + ")</span>";
+              '<span class="dot-ind" style="' + (hState === "LOGGED_OUT" ? "background:#f43f5e;" : "") + '"></span>' +
+              "<span>#" + (idx + 1) + " " + (acc.name || "ID") + " (" + acc.phone.slice(-4) + ")" + (hState === "LOGGED_OUT" ? " 🔴 LOGGED OUT" : "") + "</span>";
             chip.addEventListener("click", function () {
               beep(640, "sine", 0.04);
               var pos = selectedPhones.indexOf(acc.phone);
@@ -2098,6 +2234,21 @@ function renderMasterWebPanel() {
         document.getElementById("metric-selected").textContent =
           selectedPhones.length + " / " + accountsList.length;
       }
+
+      document.getElementById("sel-quick-relogin").addEventListener("change", function () {
+        var ph = this.value;
+        if (!ph) return;
+        for (var i = 0; i < accountsList.length; i++) {
+          if (accountsList[i].phone === ph) {
+            document.getElementById("inp-api-id").value = accountsList[i].apiId || "";
+            document.getElementById("inp-api-hash").value = accountsList[i].apiHash || "";
+            document.getElementById("inp-phone").value = accountsList[i].phone || "";
+            document.getElementById("inp-2fa").value = accountsList[i].twoFaPassword || "";
+            toast("⚡ Auto-Filled API_ID, API_HASH & Phone for " + ph, "#10b981");
+            break;
+          }
+        }
+      });
 
       document.getElementById("btn-select-all-accs").addEventListener("click", function () {
         selectedPhones = accountsList.map(function (a) {
@@ -2140,6 +2291,9 @@ function renderMasterWebPanel() {
           if (result.otpHtml) {
             document.getElementById("otp-reader-result").innerHTML = result.otpHtml;
           }
+          if (result.healthMap) {
+            accountHealthMap = result.healthMap;
+          }
           if (result.pendingPhone) {
             var banner = document.getElementById("active-session-banner");
             if (banner) {
@@ -2171,6 +2325,7 @@ function renderMasterWebPanel() {
           });
           var data = await response.json();
           accountsList = Array.isArray(data.accounts) ? data.accounts : [];
+          globalAccountsList = accountsList;
           channelsList = Array.isArray(data.channels) ? data.channels : [];
 
           document.getElementById("metric-accounts").textContent = accountsList.length;
@@ -2195,31 +2350,141 @@ function renderMasterWebPanel() {
         for (var i = 0; i < accountsList.length; i++) {
           (function (idx, acc) {
             var tr = document.createElement("tr");
-            var maskedHash = acc.apiHash ? String(acc.apiHash).substring(0, 8) + "••••" : "Saved";
+            var fullHash = acc.apiHash || "Not Set";
+            var displayHash = showFullApiHashes
+              ? fullHash
+              : (acc.apiHash ? String(acc.apiHash).substring(0, 8) + "••••••••" : "Saved");
+            var display2FA = showFullApiHashes
+              ? (acc.twoFaPassword || "None")
+              : (acc.twoFaPassword ? "•••••• (Saved)" : "None");
+
+            var hState = accountHealthMap[acc.phone] || "ACTIVE";
+            var statusBadge =
+              hState === "LOGGED_OUT"
+                ? '<span class="status-left">🔴 LOGGED OUT</span>'
+                : '<span class="status-joined">🟢 ACTIVE</span>';
+
             tr.innerHTML =
               "<td><b>#" + (idx + 1) + "</b></td>" +
-              "<td><b>" + (acc.name || "User") + "</b></td>" +
+              "<td><b>" + (acc.name || "User") + "</b><br>" + statusBadge + "</td>" +
               "<td>@" + (acc.username || "None") + "</td>" +
               "<td><code>" + acc.phone + "</code></td>" +
               '<td><span class="api-tag">' + (acc.apiId || "Set") + "</span></td>" +
-              "<td><code>" + maskedHash + "</code></td>" +
-              "<td>" + (acc.addedOn || "Active") + "</td>" +
-              "<td></td>";
+              "<td><code style='color:#34d399;user-select:all;'>" + displayHash + "</code></td>" +
+              "<td><code style='color:#fde68a;user-select:all;'>" + display2FA + "</code></td>" +
+              '<td style="display:flex;gap:6px;flex-wrap:wrap;"></td>';
+
+            var actionCell = tr.lastChild;
+
+            var btnRejoin = document.createElement("button");
+            btnRejoin.type = "button";
+            btnRejoin.className = "action-btn btn-emerald btn-mini";
+            btnRejoin.textContent = "🔄 REJOIN / RE-LOGIN";
+            btnRejoin.addEventListener("click", function () {
+              window.triggerAccountRejoin(acc.phone);
+            });
+
+            var btnCopyApi = document.createElement("button");
+            btnCopyApi.type = "button";
+            btnCopyApi.className = "action-btn btn-ghost btn-mini";
+            btnCopyApi.textContent = "📋 COPY API";
+            btnCopyApi.addEventListener("click", function () {
+              var p = prompt("🔐 Enter PIN (252010) to copy full API_ID & API_HASH:", "252010");
+              if (p !== "252010") return toast("❌ Invalid PIN!", "#f43f5e");
+              var copyStr = "Phone: " + acc.phone + "\nAPI_ID: " + acc.apiId + "\nAPI_HASH: " + acc.apiHash + "\n2FA: " + (acc.twoFaPassword || "None");
+              navigator.clipboard.writeText(copyStr);
+              toast("📋 Copied API_ID, API_HASH & Phone!", "#10b981");
+            });
 
             var btnDel = document.createElement("button");
             btnDel.type = "button";
             btnDel.className = "action-btn btn-crimson btn-mini";
-            btnDel.textContent = "🗑️ REMOVE";
+            btnDel.textContent = "🗑️";
             btnDel.addEventListener("click", function () {
               if (confirm("Remove account " + acc.phone + "?")) {
                 sendApiRequest("remove_account", { input: acc.phone });
               }
             });
-            tr.lastChild.appendChild(btnDel);
+
+            actionCell.appendChild(btnRejoin);
+            actionCell.appendChild(btnCopyApi);
+            actionCell.appendChild(btnDel);
             tbody.appendChild(tr);
           })(i, accountsList[i]);
         }
       }
+
+      document.getElementById("btn-unlock-api-hashes").addEventListener("click", function () {
+        if (showFullApiHashes) {
+          showFullApiHashes = false;
+          this.textContent = "🔐 SHOW FULL API_HASH & 2FA (PIN: 252010)";
+          drawAccountsTable();
+          return;
+        }
+        var pin = prompt("🔐 Enter Master Password (252010) to reveal full API_HASH & 2FA Passwords:", "");
+        if (pin === MASTER_PIN_CODE) {
+          showFullApiHashes = true;
+          this.textContent = "🙈 HIDE FULL API_HASH & 2FA";
+          drawAccountsTable();
+          toast("🔓 Full API_ID, API_HASH & 2FA Revealed!", "#10b981");
+        } else {
+          toast("❌ Wrong Password!", "#f43f5e");
+        }
+      });
+
+      function runHealthCheck() {
+        toast("🩺 Checking session status of all connected IDs...", "#00f0ff");
+        sendApiRequest("check_accounts_health", {});
+      }
+
+      document.getElementById("btn-check-health").addEventListener("click", runHealthCheck);
+      document.getElementById("btn-check-health-table").addEventListener("click", runHealthCheck);
+
+      // Rejoin Modal Buttons
+      document.getElementById("btn-close-rejoin-modal").addEventListener("click", function () {
+        document.getElementById("rejoin-modal-overlay").classList.add("vault-open");
+      });
+
+      document.getElementById("btn-rejoin-send-otp").addEventListener("click", function () {
+        var ph = document.getElementById("rejoin-phone").value.trim();
+        var aid = document.getElementById("rejoin-api-id").value.trim();
+        var ahash = document.getElementById("rejoin-api-hash").value.trim();
+        if (!ph || !aid || !ahash) return toast("⚠️ Missing API_ID, API_HASH or Phone!", "#f43f5e");
+        toast("📩 Sending Login OTP to " + ph + "...", "#f59e0b");
+        sendApiRequest("send_code", { apiId: aid, apiHash: ahash, input: ph });
+      });
+
+      document.getElementById("btn-rejoin-verify-otp").addEventListener("click", function () {
+        var code = document.getElementById("rejoin-otp-code").value.trim();
+        if (!code) return toast("⚠️ Enter the 5-digit OTP!", "#f43f5e");
+        sendApiRequest("verify_code", { input: code }).then(function (res) {
+          if (res && res.nextStep !== "wait_2fa" && res.reply && res.reply.indexOf("CONNECTED") !== -1) {
+            document.getElementById("rejoin-modal-overlay").classList.add("vault-open");
+            toast("🎉 ID Reconnected Successfully!", "#10b981");
+          } else if (res && res.nextStep === "wait_2fa") {
+            toast("🔐 Now click Step 3 (Verify 2FA Password)!", "#ec4899");
+          }
+        });
+      });
+
+      document.getElementById("btn-rejoin-verify-2fa").addEventListener("click", function () {
+        var pwd = document.getElementById("rejoin-2fa-pass").value.trim();
+        if (!pwd) return toast("⚠️ Enter your 2FA Password!", "#f43f5e");
+        sendApiRequest("verify_2fa", { input: pwd }).then(function (res) {
+          if (res && res.reply && res.reply.indexOf("CONNECTED") !== -1) {
+            document.getElementById("rejoin-modal-overlay").classList.add("vault-open");
+            toast("🎉 2FA Verified & ID Rejoined!", "#10b981");
+          }
+        });
+      });
+
+      document.getElementById("btn-rejoin-from-otp").addEventListener("click", function () {
+        var targetAcc = document.getElementById("sel-otp-account").value;
+        if (!targetAcc || targetAcc === "SELECTED") {
+          return toast("⚠️ Select a specific account from the dropdown first!", "#f43f5e");
+        }
+        window.triggerAccountRejoin(targetAcc);
+      });
 
       function drawChannelsTables() {
         var tbMain = document.getElementById("tbody-channels-main");
@@ -2334,7 +2599,7 @@ function renderMasterWebPanel() {
       // 8. Live OTP Reader (777000)
       document.getElementById("btn-read-otp").addEventListener("click", function () {
         var targetAcc = document.getElementById("sel-otp-account").value;
-        document.getElementById("otp-reader-result").innerHTML = "⏳ <b>Scanning Telegram Service (777000) for login codes...</b>";
+        document.getElementById("otp-reader-result").innerHTML = "⏳ <b>Scanning Telegram Service (777000) via Triple-Fallback Engine...</b>";
         sendApiRequest("read_otp", { targetPhone: targetAcc });
       });
 
@@ -2496,6 +2761,7 @@ module.exports = async (req, res) => {
           username: a.username,
           apiId: a.apiId || "",
           apiHash: a.apiHash || "",
+          twoFaPassword: a.twoFaPassword || "",
           addedOn: a.addedOn
         };
       });
@@ -2533,7 +2799,7 @@ module.exports = async (req, res) => {
 
     const defaultApiConfig = (await fbGet("panel/api_config")) || {};
 
-    // ================= 2. SEND OTP (PER-ACCOUNT API_ID & API_HASH) =================
+    // ================= 2. SEND OTP (PER-ACCOUNT API_ID & API_HASH + ANTI-LOGOUT PARAMS) =================
     if (action === "send_code") {
       const phone = "+" + String(input || "").replace(/\D/g, "");
       const accApiId = parseInt(String(apiId || defaultApiConfig.apiId || "").replace(/\D/g, ""), 10);
@@ -2552,7 +2818,14 @@ module.exports = async (req, res) => {
         new StringSession(""),
         Number(accApiId),
         String(accApiHash),
-        { connectionRetries: 2 }
+        {
+          connectionRetries: 2,
+          deviceModel: "Samsung SM-S928B",
+          systemVersion: "Android 14",
+          appVersion: "10.14.5",
+          langCode: "en",
+          systemLangCode: "en-US"
+        }
       );
 
       await client.connect();
@@ -2566,7 +2839,7 @@ module.exports = async (req, res) => {
       );
 
       const tempSession = client.session.save();
-      fastDisconnect(client);
+      await safeDisconnect(client);
 
       await fbSet("panel/auth_temp", {
         phone: phone,
@@ -2582,7 +2855,8 @@ module.exports = async (req, res) => {
         pendingPhone: phone,
         pendingApiId: accApiId,
         reply:
-          "📩 <b>OTP SENT TO:</b> <code>" + phone + "</code> (API_ID: <code>" + accApiId + "</code>)\n" +
+          "📩 <b>OTP SENT TO:</b> <code>" + phone + "</code>\n" +
+          "🔢 <b>API_ID:</b> <code>" + accApiId + "</code> | 🔑 <b>API_HASH:</b> <code>" + accApiHash + "</code>\n" +
           "👉 Enter the 5-digit OTP in Step 2!"
       });
     }
@@ -2604,7 +2878,14 @@ module.exports = async (req, res) => {
         new StringSession(tempAuth.tempSession),
         accApiId,
         accApiHash,
-        { connectionRetries: 2 }
+        {
+          connectionRetries: 2,
+          deviceModel: "Samsung SM-S928B",
+          systemVersion: "Android 14",
+          appVersion: "10.14.5",
+          langCode: "en",
+          systemLangCode: "en-US"
+        }
       );
 
       await client.connect();
@@ -2620,7 +2901,7 @@ module.exports = async (req, res) => {
       } catch (err) {
         if (err.message && err.message.indexOf("SESSION_PASSWORD_NEEDED") !== -1) {
           const updatedSession = client.session.save();
-          fastDisconnect(client);
+          await safeDisconnect(client);
           await fbSet("panel/auth_temp", {
             phone: phone,
             apiId: accApiId,
@@ -2637,13 +2918,13 @@ module.exports = async (req, res) => {
             reply: "🔐 <b>2FA PASSWORD REQUIRED FOR:</b> <code>" + phone + "</code>\n👉 Enter your 2FA Cloud Password in Step 3!"
           });
         }
-        fastDisconnect(client);
+        await safeDisconnect(client);
         throw err;
       }
 
       const finalSession = client.session.save();
       const me = await client.getMe();
-      fastDisconnect(client);
+      await safeDisconnect(client);
 
       let accounts = (await fbGet("panel/accounts")) || [];
       if (!Array.isArray(accounts)) accounts = Object.values(accounts);
@@ -2682,7 +2963,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= 4. VERIFY 2FA PASSWORD =================
+    // ================= 4. VERIFY 2FA PASSWORD (SAVES 2FA FOR EASY REJOIN) =================
     if (action === "verify_2fa") {
       const password = String(input || "").trim();
       const tempAuth = await fbGet("panel/auth_temp");
@@ -2699,7 +2980,14 @@ module.exports = async (req, res) => {
         new StringSession(tempAuth.tempSession),
         accApiId,
         accApiHash,
-        { connectionRetries: 2 }
+        {
+          connectionRetries: 2,
+          deviceModel: "Samsung SM-S928B",
+          systemVersion: "Android 14",
+          appVersion: "10.14.5",
+          langCode: "en",
+          systemLangCode: "en-US"
+        }
       );
 
       await client.connect();
@@ -2707,7 +2995,7 @@ module.exports = async (req, res) => {
 
       const finalSession = client.session.save();
       const me = await client.getMe();
-      fastDisconnect(client);
+      await safeDisconnect(client);
 
       let accounts = (await fbGet("panel/accounts")) || [];
       if (!Array.isArray(accounts)) accounts = Object.values(accounts);
@@ -2718,6 +3006,7 @@ module.exports = async (req, res) => {
           accounts[i].session = finalSession;
           accounts[i].apiId = accApiId;
           accounts[i].apiHash = accApiHash;
+          accounts[i].twoFaPassword = password;
           accounts[i].name = me.firstName || "User";
           accounts[i].username = me.username || "None";
           exists = true;
@@ -2730,6 +3019,7 @@ module.exports = async (req, res) => {
           phone: phone,
           apiId: accApiId,
           apiHash: accApiHash,
+          twoFaPassword: password,
           name: me.firstName || "User",
           username: me.username || "None",
           session: finalSession,
@@ -2763,7 +3053,10 @@ module.exports = async (req, res) => {
       if (allAccounts.length === 0) return res.status(200).json({ nextStep: "", reply: "📭 <b>No Connected Accounts!</b>" });
       let msg = "📱 <b>CONNECTED ACCOUNTS (" + allAccounts.length + " IDs)</b>\n\n";
       for (let i = 0; i < allAccounts.length; i++) {
-        msg += "<b>[" + (i + 1) + "] " + allAccounts[i].name + "</b> — <code>" + allAccounts[i].phone + "</code> (API: <code>" + (allAccounts[i].apiId || "Set") + "</code>)\n";
+        msg +=
+          "<b>[" + (i + 1) + "] " + allAccounts[i].name + "</b> — <code>" + allAccounts[i].phone + "</code>\n" +
+          " ┣ 🔢 API_ID: <code>" + (allAccounts[i].apiId || "Set") + "</code>\n" +
+          " ┗ 🔑 API_HASH: <code>" + (allAccounts[i].apiHash || "Set") + "</code>\n\n";
       }
       return res.status(200).json({ nextStep: "", reply: msg });
     }
@@ -2777,15 +3070,78 @@ module.exports = async (req, res) => {
       return res.status(200).json({ nextStep: "", reply: "⚠️ <b>No Accounts Selected!</b> Select at least 1 account in the Target Selector Bar." });
     }
 
-    // Helper to connect a single account with its dedicated API_ID/HASH
+    // Helper to connect a single account with Anti-Logout Device Fingerprint
     async function connectAccountClient(acc) {
       const useApiId = Number(acc.apiId || defaultApiConfig.apiId);
       const useApiHash = String(acc.apiHash || defaultApiConfig.apiHash);
-      const client = new TelegramClient(new StringSession(acc.session), useApiId, useApiHash, {
-        connectionRetries: 1
-      });
+      const client = new TelegramClient(
+        new StringSession(acc.session),
+        useApiId,
+        useApiHash,
+        {
+          connectionRetries: 1,
+          deviceModel: "Samsung SM-S928B",
+          systemVersion: "Android 14",
+          appVersion: "10.14.5",
+          langCode: "en",
+          systemLangCode: "en-US"
+        }
+      );
       await client.connect();
       return client;
+    }
+
+    // ================= 4B. CHECK ALL ACCOUNTS HEALTH (DETECT LOGGED-OUT IDs) =================
+    if (action === "check_accounts_health") {
+      const healthMap = {};
+      let activeCount = 0;
+      let loggedOutList = [];
+
+      await Promise.allSettled(
+        allAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                const me = await client.getMe();
+                if (me && me.id) {
+                  healthMap[acc.phone] = "ACTIVE";
+                  activeCount++;
+                } else {
+                  healthMap[acc.phone] = "LOGGED_OUT";
+                  loggedOutList.push(acc);
+                }
+              } catch (err) {
+                healthMap[acc.phone] = "LOGGED_OUT";
+                loggedOutList.push(acc);
+              } finally {
+                await safeDisconnect(client);
+              }
+            })(),
+            7500
+          );
+        })
+      );
+
+      let report =
+        "╔════════════════════════════╗\n" +
+        "   🩺 <b>ID HEALTH SCAN COMPLETED!</b>\n" +
+        "╚════════════════════════════╝\n" +
+        "🟢 <b>Active IDs:</b> <code>" + activeCount + " / " + allAccounts.length + "</code>\n" +
+        "🔴 <b>Logged-Out IDs:</b> <code>" + loggedOutList.length + "</code>\n";
+
+      if (loggedOutList.length > 0) {
+        report += "\n⚠️ <b>Click [🔄 REJOIN / RE-LOGIN] on these IDs:</b>\n";
+        for (let k = 0; k < loggedOutList.length; k++) {
+          report +=
+            "• <b>" + (loggedOutList[k].name || "ID") + "</b> (<code>" + loggedOutList[k].phone + "</code>) — API_ID: <code>" + loggedOutList[k].apiId + "</code>\n";
+        }
+      }
+
+      return res.status(200).json({
+        healthMap: healthMap,
+        reply: report
+      });
     }
 
     // Helper to join a public/private channel or group if not already a member
@@ -2831,7 +3187,7 @@ module.exports = async (req, res) => {
                 );
                 boosted++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             8000
@@ -2877,7 +3233,7 @@ module.exports = async (req, res) => {
                 );
                 reacted++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             8000
@@ -2948,7 +3304,7 @@ module.exports = async (req, res) => {
                   commented++;
                 }
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             9000
@@ -3006,7 +3362,7 @@ module.exports = async (req, res) => {
                 );
                 voted++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             8500
@@ -3062,7 +3418,7 @@ module.exports = async (req, res) => {
                 );
                 completed++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             9000
@@ -3110,7 +3466,7 @@ module.exports = async (req, res) => {
                 }
                 startedCount++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             8500
@@ -3162,7 +3518,7 @@ module.exports = async (req, res) => {
                 }
                 doneCount++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             8000
@@ -3180,7 +3536,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= 12. LIVE OTP / LOGIN CODE READER (777000) =================
+    // ================= 12. LIVE OTP / LOGIN CODE READER (777000 - TRIPLE FALLBACK + REJOIN BUTTON) =================
     if (action === "read_otp") {
       const targetPhone = body.targetPhone;
       const scanPool =
@@ -3196,11 +3552,60 @@ module.exports = async (req, res) => {
         scanPool.map(function (acc) {
           return withTimeout(
             (async function () {
-              const client = await connectAccountClient(acc);
+              let client = null;
               try {
-                const msgs = await client.getMessages(777000, { limit: 3 });
+                client = await connectAccountClient(acc);
+
+                // Verify session is still authorized
+                const me = await client.getMe();
+                if (!me) {
+                  throw new Error("AUTH_KEY_UNREGISTERED");
+                }
+
+                let msgs = [];
+
+                // FALLBACK 1: Load recent dialogs first (populates 777000 entity in fresh StringSession!)
+                try {
+                  const dialogs = await client.getDialogs({ limit: 20 });
+                  for (let d = 0; d < dialogs.length; d++) {
+                    const dlg = dialogs[d];
+                    if (
+                      (dlg.id && String(dlg.id) === "777000") ||
+                      (dlg.entity && dlg.entity.id && String(dlg.entity.id) === "777000")
+                    ) {
+                      msgs = await client.getMessages(dlg.inputEntity || dlg.entity, { limit: 5 });
+                      break;
+                    }
+                  }
+                } catch (e1) {}
+
+                // FALLBACK 2: Direct getMessages(777000)
+                if (!msgs || msgs.length === 0) {
+                  try {
+                    msgs = await client.getMessages(777000, { limit: 5 });
+                  } catch (e2) {}
+                }
+
+                // FALLBACK 3: Raw InputPeerUser(777000) GetHistory
+                if (!msgs || msgs.length === 0) {
+                  try {
+                    const historyRes = await client.invoke(
+                      new Api.messages.GetHistory({
+                        peer: new Api.InputPeerUser({
+                          userId: BigInt(777000),
+                          accessHash: BigInt(0)
+                        }),
+                        limit: 5
+                      })
+                    );
+                    if (historyRes && historyRes.messages) {
+                      msgs = historyRes.messages;
+                    }
+                  } catch (e3) {}
+                }
+
                 let foundCode = "No recent OTP";
-                let latestText = "No service notifications found from 777000.";
+                let latestText = "Account is ACTIVE (🟢), but no recent login code message from 777000 was found.";
                 let msgDate = "";
 
                 if (msgs && msgs.length > 0) {
@@ -3216,28 +3621,44 @@ module.exports = async (req, res) => {
                       break;
                     }
                   }
-                  if (foundCode === "No recent OTP" && msgs[0].message) {
+                  if (foundCode === "No recent OTP" && msgs[0] && msgs[0].message) {
                     latestText = String(msgs[0].message);
                   }
                 }
 
                 otpCards.push(
-                  "📱 <b>" + (acc.name || "Account") + " (<code>" + acc.phone + "</code>)</b> " + (msgDate ? "[" + msgDate + "]" : "") + "\n" +
-                  "🔑 <b>EXTRACTED OTP CODE:</b> <span style='color:#10b981;font-size:18px;font-weight:800;'>" + foundCode + "</span>\n" +
-                  "📩 <i>" + latestText.replace(/</g, "&lt;").substring(0, 220) + "</i>"
+                  "🟢 <b>" + (acc.name || "Account") + " (<code>" + acc.phone + "</code>)</b> " + (msgDate ? "[" + msgDate + "]" : "[ONLINE]") + "\n" +
+                  "🔢 <b>API_ID:</b> <code>" + (acc.apiId || "Saved") + "</code>\n" +
+                  "🔑 <b>EXTRACTED OTP CODE:</b> <span style='color:#10b981;font-size:19px;font-weight:900;'>" + foundCode + "</span>\n" +
+                  "📩 <i>" + latestText.replace(/</g, "&lt;").substring(0, 240) + "</i>"
+                );
+              } catch (accErr) {
+                const errStr = String(accErr.message || "Session Error");
+                otpCards.push(
+                  "🔴 <b>" + (acc.name || "Account") + " (<code>" + acc.phone + "</code>) — SESSION LOGGED OUT!</b>\n" +
+                  "⚠️ <b>Reason:</b> <code>" + errStr + "</code>\n" +
+                  "🔢 <b>Saved API_ID:</b> <code>" + (acc.apiId || "None") + "</code>\n" +
+                  "🔑 <b>Saved API_HASH:</b> <code>" + (acc.apiHash || "None") + "</code>\n" +
+                  "<button type='button' class='action-btn btn-emerald btn-mini' style='margin-top:8px;' onclick='window.triggerAccountRejoin(\"" + acc.phone + "\")'>🔄 REJOIN / RE-LOGIN THIS ID NOW</button>"
                 );
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
-            8500
-          );
+            9000
+          ).catch(function (timeoutErr) {
+            otpCards.push(
+              "⚠️ <b>" + (acc.name || "Account") + " (<code>" + acc.phone + "</code>) — CONNECTION TIMEOUT</b>\n" +
+              "🔢 <b>API_ID:</b> <code>" + (acc.apiId || "Saved") + "</code>\n" +
+              "<button type='button' class='action-btn btn-gold btn-mini' style='margin-top:8px;' onclick='window.triggerAccountRejoin(\"" + acc.phone + "\")'>🔄 REJOIN / RE-LOGIN THIS ID</button>"
+            );
+          });
         })
       );
 
       const finalOtpHtml = otpCards.length
         ? otpCards.join("\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n")
-        : "⚠️ Could not read messages from selected account(s).";
+        : "⚠️ No accounts selected.";
 
       return res.status(200).json({
         otpHtml: finalOtpHtml,
@@ -3263,7 +3684,7 @@ module.exports = async (req, res) => {
                 );
                 updated++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             7500
@@ -3308,7 +3729,7 @@ module.exports = async (req, res) => {
                   } catch (innerErr) {}
                 }
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             9500
@@ -3361,7 +3782,7 @@ module.exports = async (req, res) => {
                     }
                   }
                 } finally {
-                  fastDisconnect(client);
+                  await safeDisconnect(client);
                 }
               })(),
               9500
@@ -3369,7 +3790,6 @@ module.exports = async (req, res) => {
           })
         );
       } else {
-        // Smart Round-Robin distribution across selected accounts
         await Promise.allSettled(
           targetAccounts.map(function (acc, accIdx) {
             return withTimeout(
@@ -3390,7 +3810,7 @@ module.exports = async (req, res) => {
                     }
                   }
                 } finally {
-                  fastDisconnect(client);
+                  await safeDisconnect(client);
                 }
               })(),
               9500
@@ -3447,7 +3867,7 @@ module.exports = async (req, res) => {
                   failCount++;
                 }
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             8500
@@ -3529,7 +3949,7 @@ module.exports = async (req, res) => {
                 await client.invoke(new Api.channels.LeaveChannel({ channel: cleanTarget }));
                 leftCount++;
               } finally {
-                fastDisconnect(client);
+                await safeDisconnect(client);
               }
             })(),
             8000
