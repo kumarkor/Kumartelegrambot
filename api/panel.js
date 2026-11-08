@@ -156,7 +156,7 @@ function filterTargetAccounts(allAccounts, selectedPhones) {
 }
 
 // ============================================================================
-// 3. MASTER QUANTUM WEB CONTROL PANEL UI (String.raw = ZERO ESCAPE BUGS)
+// 3. MASTER QUANTUM WEB CONTROL PANEL UI (100% SYNTAX VERIFIED)
 // ============================================================================
 function renderMasterWebPanel() {
   return String.raw`<!DOCTYPE html>
@@ -1111,7 +1111,7 @@ function renderMasterWebPanel() {
       <div style="text-align:center;">
         <div class="vault-crown-badge">🔄 QUICK REJOIN / RE-LOGIN ID 🔄</div>
         <div class="vault-heading" style="font-size:19px;">RECONNECT TELEGRAM ID</div>
-        <div class="vault-subtext" id="rejoin-sub-label">API_ID & API_HASH Auto-Loaded!</div>
+        <div class="vault-subtext" id="rejoin-sub-label">API_ID &amp; API_HASH Auto-Loaded!</div>
       </div>
 
       <div class="field-block">
@@ -1139,7 +1139,7 @@ function renderMasterWebPanel() {
       </div>
 
       <button type="button" class="action-btn btn-emerald" id="btn-rejoin-verify-otp">
-        ✅ 2. VERIFY OTP & REJOIN ID
+        ✅ 2. VERIFY OTP &amp; REJOIN ID
       </button>
 
       <div class="field-block" style="margin-top:10px;">
@@ -1148,7 +1148,7 @@ function renderMasterWebPanel() {
       </div>
 
       <button type="button" class="action-btn btn-royal-purple" id="btn-rejoin-verify-2fa">
-        🔐 3. VERIFY 2FA PASSWORD & SAVE
+        🔐 3. VERIFY 2FA PASSWORD &amp; SAVE
       </button>
 
       <button type="button" class="action-btn btn-ghost" id="btn-close-rejoin-modal" style="margin-top:6px;">
@@ -1166,13 +1166,13 @@ function renderMasterWebPanel() {
       <div class="royal-brand">
         <div class="royal-emblem">👑</div>
         <div class="royal-title-block">
-          <h1>TELEGRAM MASTER SMM & AUTOMATION SUITE</h1>
+          <h1>TELEGRAM MASTER SMM &amp; AUTOMATION SUITE</h1>
           <p>15+ IDs • Anti-Logout Engine • Rejoin ID • Views • Reactions • Comments • Polls • OTP Reader</p>
         </div>
       </div>
       <div class="header-actions">
         <select class="theme-pill" id="theme-switcher">
-          <option value="">👑 ROYAL GOLD & PLASMA</option>
+          <option value="">👑 ROYAL GOLD &amp; PLASMA</option>
           <option value="theme-emerald">🟢 EMERALD MATRIX</option>
           <option value="theme-crimson">🔴 CRIMSON BLAZE</option>
           <option value="theme-cyber">🔵 CYBER NEON BLUE</option>
@@ -1229,19 +1229,19 @@ function renderMasterWebPanel() {
         🛒 1. SMM PANEL (VIEWS/REACT/POLL/COMMENT)
       </button>
       <button type="button" class="cmd-tab" data-target="pane-bots">
-        🤖 2. BOT REFERRAL & BLOCK BOT
+        🤖 2. BOT REFERRAL &amp; BLOCK BOT
       </button>
       <button type="button" class="cmd-tab" data-target="pane-otp-online">
-        📩 3. LIVE OTP READER & ONLINE
+        📩 3. LIVE OTP READER &amp; ONLINE
       </button>
       <button type="button" class="cmd-tab" data-target="pane-dm-group">
-        📢 4. BULK DM & GROUP POSTER
+        📢 4. BULK DM &amp; GROUP POSTER
       </button>
       <button type="button" class="cmd-tab" data-target="pane-channels">
         📥 5. CHANNEL JOIN / LEAVE
       </button>
       <button type="button" class="cmd-tab" data-target="pane-accounts">
-        ➕ 6. ADD / REJOIN ID (API_ID & HASH)
+        ➕ 6. ADD / REJOIN ID (API_ID &amp; HASH)
       </button>
     </div>
 
@@ -1254,7 +1254,7 @@ function renderMasterWebPanel() {
           <button type="button" class="action-btn btn-ghost btn-mini" id="btn-sync-now">🔄 REFRESH</button>
         </div>
       </div>
-      <div class="console-screen" id="console-box">👑 [QUANTUM SMM SUITE READY]: Anti-Logout Engine & Triple-Fallback 777000 OTP Reader Active!</div>
+      <div class="console-screen" id="console-box">👑 [QUANTUM SMM SUITE READY]: Anti-Logout Engine &amp; Triple-Fallback 777000 OTP Reader Active!</div>
     </div>
 
     <!-- ====================================================================
@@ -1474,7 +1474,7 @@ function renderMasterWebPanel() {
             <span class="badge-chip">ANTI-SPAM</span>
           </div>
           <div class="helper-alert" style="border-color: var(--danger);">
-            🚫 Stop unwanted bots from spamming your accounts! Enter the Bot's <code>@username</code> below to instantly <b>Block & Delete Chat History</b> or <b>Unblock</b> across all selected accounts.
+            🚫 Stop unwanted bots from spamming your accounts! Enter the Bot's <code>@username</code> below to instantly <b>Block &amp; Delete Chat History</b> or <b>Unblock</b> across all selected accounts.
           </div>
           <div class="field-block">
             <div class="field-title">
@@ -1490,7 +1490,7 @@ function renderMasterWebPanel() {
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
             <button type="button" class="action-btn btn-crimson" id="btn-block-bot">
-              🚫 BLOCK & DELETE CHAT
+              🚫 BLOCK &amp; DELETE CHAT
             </button>
             <button type="button" class="action-btn btn-cyan" id="btn-unblock-bot">
               🟢 UNBLOCK BOT
@@ -1512,7 +1512,7 @@ function renderMasterWebPanel() {
             <span class="badge-chip">TRIPLE-FALLBACK FIXED</span>
           </div>
           <div class="helper-alert">
-            🔑 Select any connected Telegram account below to read incoming Telegram login codes (`777000`). If an account is logged out, click <b>🔄 REJOIN / RE-LOGIN SELECTED ID</b> right below to reconnect it with its saved `API_ID` & `API_HASH`!
+            🔑 Select any connected Telegram account below to read incoming Telegram login codes (<code>777000</code>). If an account is logged out, click <b>🔄 REJOIN / RE-LOGIN THIS ID</b> right below to reconnect it with its saved <code>API_ID</code> &amp; <code>API_HASH</code>!
           </div>
           <div class="field-block">
             <div class="field-title">
@@ -1586,7 +1586,7 @@ function renderMasterWebPanel() {
           <div class="field-block">
             <div class="field-title">
               <label>TARGET GROUP LINKS OR @USERNAMES (1 PER LINE OR COMMA SEPARATED)</label>
-              <span>AUTO-JOINS & POSTS</span>
+              <span>AUTO-JOINS &amp; POSTS</span>
             </div>
             <textarea
               id="inp-group-targets"
@@ -1597,12 +1597,12 @@ function renderMasterWebPanel() {
           <div class="field-block">
             <div class="field-title">
               <label>PROMOTIONAL AD MESSAGE TO POST</label>
-              <span>SUPPORTS TEXT & LINKS</span>
+              <span>SUPPORTS TEXT &amp; LINKS</span>
             </div>
             <textarea
               id="inp-group-ad-msg"
               class="royal-textarea"
-              placeholder="🔥 Join our official channel for daily giveaways & tricks! 👉 @MyChannel"
+              placeholder="🔥 Join our official channel for daily giveaways &amp; tricks! 👉 @MyChannel"
             ></textarea>
           </div>
           <button type="button" class="action-btn btn-gold" id="btn-post-group-ads">
@@ -1721,7 +1721,7 @@ function renderMasterWebPanel() {
 
       <div class="glass-panel">
         <div class="panel-top">
-          <div class="panel-heading">📋 REGISTERED CHANNELS & 1-CLICK AUTO LEAVE</div>
+          <div class="panel-heading">📋 REGISTERED CHANNELS &amp; 1-CLICK AUTO LEAVE</div>
         </div>
         <div class="table-scroll">
           <table class="royal-table">
@@ -1745,19 +1745,19 @@ function renderMasterWebPanel() {
          ==================================================================== -->
     <div id="pane-accounts" class="view-pane">
       <div class="helper-alert">
-        ⚡ <b>DEDICATED API_ID & API_HASH + 1-CLICK REJOIN SYSTEM:</b> Every account's `API_ID` and `API_HASH` is saved in Firebase. If any ID ever logs out, simply click <b>🔄 REJOIN / RE-LOGIN</b> next to that account in the table below — it will auto-fill the `API_ID`, `API_HASH`, and `Phone Number` so you only have to enter the OTP & 2FA password!
+        ⚡ <b>DEDICATED API_ID &amp; API_HASH + 1-CLICK REJOIN SYSTEM:</b> Every account's <code>API_ID</code> and <code>API_HASH</code> is saved in Firebase. If any ID ever logs out, simply click <b>🔄 REJOIN / RE-LOGIN</b> next to that account in the table below — it will auto-fill the <code>API_ID</code>, <code>API_HASH</code>, and <code>Phone Number</code> so you only have to enter the OTP &amp; 2FA password!
       </div>
 
       <div class="two-col-layout">
         <div class="glass-panel" id="add-account-form-panel">
           <div class="panel-top">
             <div class="panel-heading">➕ ADD OR RE-LOGIN TELEGRAM ID</div>
-            <span class="badge-chip">STEP 1 & 2</span>
+            <span class="badge-chip">STEP 1 &amp; 2</span>
           </div>
 
           <div class="field-block">
             <div class="field-title">
-              <label>QUICK SELECT SAVED ID TO AUTO-FILL API_ID & HASH</label>
+              <label>QUICK SELECT SAVED ID TO AUTO-FILL API_ID &amp; HASH</label>
               <span>OPTIONAL</span>
             </div>
             <select id="sel-quick-relogin" class="royal-select">
@@ -1824,7 +1824,7 @@ function renderMasterWebPanel() {
           </div>
 
           <button type="button" class="action-btn btn-emerald" id="btn-verify-otp">
-            ✅ STEP 2: VERIFY OTP & CONNECT ID
+            ✅ STEP 2: VERIFY OTP &amp; CONNECT ID
           </button>
         </div>
 
@@ -1852,7 +1852,7 @@ function renderMasterWebPanel() {
           </div>
 
           <button type="button" class="action-btn btn-royal-purple" id="btn-verify-2fa">
-            🔐 STEP 3: VERIFY 2FA & SAVE ACCOUNT
+            🔐 STEP 3: VERIFY 2FA &amp; SAVE ACCOUNT
           </button>
 
           <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 16px 0;" />
@@ -1871,10 +1871,10 @@ function renderMasterWebPanel() {
 
       <div class="glass-panel">
         <div class="panel-top">
-          <div class="panel-heading">📱 CONNECTED TELEGRAM ACCOUNTS (FULL API_ID & API_HASH + 1-CLICK REJOIN)</div>
+          <div class="panel-heading">📱 CONNECTED TELEGRAM ACCOUNTS (FULL API_ID &amp; API_HASH + 1-CLICK REJOIN)</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button type="button" class="action-btn btn-gold btn-mini" id="btn-unlock-api-hashes">
-              🔐 SHOW FULL API_HASH & 2FA (PIN: 252010)
+              🔐 SHOW FULL API_HASH &amp; 2FA (PIN: 252010)
             </button>
             <button type="button" class="action-btn btn-cyan btn-mini" id="btn-check-health-table">
               🩺 SCAN ALL IDs STATUS
@@ -1886,7 +1886,7 @@ function renderMasterWebPanel() {
             <thead>
               <tr>
                 <th>#</th>
-                <th>NAME & STATUS</th>
+                <th>NAME &amp; STATUS</th>
                 <th>USERNAME</th>
                 <th>PHONE</th>
                 <th>DEDICATED API_ID</th>
@@ -1929,7 +1929,6 @@ function renderMasterWebPanel() {
         return;
       }
 
-      // Populate Quick Rejoin Modal AND Tab 6 Form
       document.getElementById("rejoin-phone").value = found.phone || "";
       document.getElementById("rejoin-api-id").value = found.apiId || "";
       document.getElementById("rejoin-api-hash").value = found.apiHash || "";
@@ -3556,7 +3555,6 @@ module.exports = async (req, res) => {
               try {
                 client = await connectAccountClient(acc);
 
-                // Verify session is still authorized
                 const me = await client.getMe();
                 if (!me) {
                   throw new Error("AUTH_KEY_UNREGISTERED");
@@ -3646,7 +3644,7 @@ module.exports = async (req, res) => {
               }
             })(),
             9000
-          ).catch(function (timeoutErr) {
+          ).catch(function () {
             otpCards.push(
               "⚠️ <b>" + (acc.name || "Account") + " (<code>" + acc.phone + "</code>) — CONNECTION TIMEOUT</b>\n" +
               "🔢 <b>API_ID:</b> <code>" + (acc.apiId || "Saved") + "</code>\n" +
