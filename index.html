@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>👑 KURMURYA 24/7 TELEGRAM BOT CLOUD STUDIO</title>
+  <style>
+    :root {
+      --bg-dark: #050814;
+      --card-bg: #0f172a;
+      --border: #1e293b;
+      --neon-blue: #38bdf8;
+      --neon-purple: #7c3aed;
+      --neon-green: #10b981;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body {
+      background: linear-gradient(180deg, #040711 0%, #0b132b 50%, #0f172a 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 20px 14px 50px;
+    }
+    .container { max-width: 680px; margin: 0 auto; }
+    .badge {
+      display: inline-block;
+      background: #0a192f;
+      color: var(--neon-blue);
+      border: 1px solid #0284c7;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .hero { text-align: center; margin-bottom: 22px; }
+    .hero h1 { font-size: 25px; margin-top: 12px; color: #fff; }
+    .hero p { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
+    .card {
+      background: var(--card-bg);
+      border: 1.5px solid #2563eb;
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    }
+    .card h2 { font-size: 16px; color: #60a5fa; margin-bottom: 6px; }
+    .card p.desc { font-size: 12px; color: var(--text-sub); margin-bottom: 14px; }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      margin: 12px 0 5px;
+    }
+    input {
+      width: 100%;
+      background: #090d16;
+      border: 1px solid #334155;
+      color: #fff;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus { border-color: var(--neon-blue); }
+    .btn {
+      width: 100%;
+      border: none;
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      margin-top: 16px;
+      background: linear-gradient(90deg, #2563eb, #7c3aed);
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.92; }
+    .btn-green { background: linear-gradient(90deg, #059669, #10b981); }
+    .btn-sec {
+      background: #1e293b;
+      border: 1px solid #475569;
+      color: #cbd5e1;
+      padding: 10px 12px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .btn-danger {
+      background: #311018;
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+    }
+    .row { display: flex; gap: 8px; margin-top: 10px; }
+    .row > * { flex: 1; }
+    .status-banner {
+      background: #111827;
+      border: 1px solid #334155;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #a7f3d0;
+      margin-bottom: 16px;
+    }
+    .bot-item {
+      background: #111827;
+      border: 1px solid #10b981;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .bot-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .bot-title { font-size: 15px; font-weight: 700; color: #fff; }
+    .pill-on {
+      background: #064e3b;
+      color: #34d399;
+      border: 1px solid #10b981;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .bot-meta { font-size: 12px; color: #cbd5e1; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hero">
+      <span class="badge">☁️ 24/7 VERCEL WEBHOOK + FIREBASE REALTIME CLOUD</span>
+      <h1>👑 KURMURYA 24/7 BOT STUDIO</h1>
+      <p>App band aso kivha Phone band aso — Tuze Telegram Bots 24/7 Non-Stop Chalu Rahtil!</p>
+    </div>
+
+    <div id="statusBanner" class="status-banner">
+      🟢 Connected to Firebase (kurmuryatelegrambot) & 24/7 Webhook Engine (/api/bot)
+    </div>
+
+    <!-- CREATE / CONNECT UNLIMITED 24/7 BOT CARD -->
+    <div class="card">
+      <h2>➕ CONNECT & LAUNCH 24/7 TELEGRAM BOT</h2>
+      <p class="desc">
+        Automatically sets Telegram Webhook to <b>https://kumartelegrambot.vercel.app/api/bot</b> with Photo Menu, Reaction & Vote Poll, ₹1 Channel Unlock Lock, Live Force-Join Check & QR/UPI Top-Up.
+      </p>
+
+      <label>1. TELEGRAM BOT TOKEN (@BotFather)</label>
+      <input type="text" id="botToken" placeholder="1234567890:AAH_your_bot_token_here..." />
+
+      <label>2. ADMIN TELEGRAM USER ID</label>
+      <input type="number" id="adminId" value="7335163273" placeholder="e.g. 7335163273" />
+
+      <label>3. CHANNEL UNLOCK PRICE (₹ PER CHANNEL)</label>
+      <input type="number" id="unlockPrice" value="1" step="0.5" />
+
+      <button class="btn" onclick="connect24x7Bot()">🚀 ACTIVATE 24/7 CLOUD BOT NOW</button>
+    </div>
+
+    <!-- ACTIVE 24/7 BOTS LIST -->
+    <div class="card">
+      <h2>🤖 ACTIVE 24/7 CLOUD BOTS (FIREBASE SYNCED)</h2>
+      <p class="desc">All bots below are running 24/7 on Vercel Cloud Webhooks.</p>
+      <div id="botsList">Loading 24/7 bots from Firebase...</div>
+    </div>
+  </div>
+
+  <!-- FIREBASE SDK (YOUR EXACT CONFIG) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB8m4tI9K2j7lP7mtWDJ60S3ALRJka5o-4",
+      authDomain: "kurmuryatelegrambot.firebaseapp.com",
+      databaseURL: "https://kurmuryatelegrambot-default-rtdb.firebaseio.com",
+      projectId: "kurmuryatelegrambot",
+      storageBucket: "kurmuryatelegrambot.firebasestorage.app",
+      messagingSenderId: "607378046173",
+      appId: "1:607378046173:web:0b8b07290938a1e0efaf34",
+      measurementId: "G-RHTYHVNTC6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    try { getAnalytics(app); } catch (e) {}
+    const db = getDatabase(app);
+
+    // Live Real-Time Listener for Unlimited Bots
+    const botsRef = ref(db, "unlimited_bots");
+    onValue(botsRef, (snapshot) => {
+      renderBots(snapshot.val() || {});
+    }, () => {
+      loadBotsViaApi();
+    });
+
+    async function loadBotsViaApi() {
+      try {
+        const res = await fetch("/api/bot?action=list_bots");
+        const data = await res.json();
+        if (data.success) renderBots(data.bots || {});
+      } catch (e) {}
+    }
+
+    function renderBots(botsObj) {
+      const container = document.getElementById("botsList");
+      const keys = Object.keys(botsObj);
+      if (keys.length === 0) {
+        container.innerHTML = `<div style="color:#94a3b8;font-size:13px;">📭 No bots connected yet. Enter your Bot Token & Admin ID above!</div>`;
+        return;
+      }
+
+      container.innerHTML = keys.map((botId) => {
+        const b = botsObj[botId];
+        const s = b.settings || {};
+        const usersCount = Object.keys(b.users || {}).length;
+        const forceCount = Array.isArray(b.forceChannels) ? b.forceChannels.length : 0;
+        const isRun = b.isRunning !== false;
+
+        return `
+          <div class="bot-item">
+            <div class="bot-head">
+              <div class="bot-title">🤖 ${b.botName || "Bot"} (@${b.botUsername || "bot"})</div>
+              <span class="pill-on">${isRun ? "🟢 24/7 WEBHOOK ACTIVE" : "⏸️ PAUSED"}</span>
+            </div>
+            <div class="bot-meta">
+              👑 <b>Admin ID:</b> ${b.adminId} | 👥 <b>Users:</b> ${usersCount} | 📦 <b>Orders:</b> ${b.totalOrders || 0}<br/>
+              🔓 <b>Channel Unlock:</b> ₹${s.channelUnlockPrice || 1} | 🎁 <b>Daily:</b> ₹${s.dailyBonus || 0.5} | 👥 <b>Refer:</b> ₹${s.referBonus || 1}<br/>
+              📢 <b>Force-Join Channels:</b> ${forceCount} | 💳 <b>UPI:</b> ${s.upiId || "Not Set"}
+            </div>
+            <div class="row">
+              <button class="btn btn-sec" onclick="window.addForcePrompt('${botId}')">📢 + Force Channel</button>
+              <button class="btn btn-sec" onclick="window.updateUpiPrompt('${botId}')">💳 Set UPI & Price</button>
+              <button class="btn btn-sec btn-danger" onclick="window.deleteBot('${botId}')">🗑️ Delete</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    window.connect24x7Bot = async function () {
+      const token = document.getElementById("botToken").value.trim();
+      const adminId = document.getElementById("adminId").value.trim();
+      const channelUnlockPrice = document.getElementById("unlockPrice").value.trim();
+      const banner = document.getElementById("statusBanner");
+
+      if (!token || !adminId) {
+        alert("⚠️ Please enter both Bot Token and Admin Telegram ID!");
+        return;
+      }
+
+      banner.innerText = "⏳ Setting 24/7 Cloud Webhook on Telegram & Saving to Firebase...";
+      try {
+        const res = await fetch("/api/bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "connect_bot",
+            token,
+            adminId,
+            channelUnlockPrice
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById("botToken").value = "";
+          banner.innerText = `🎉 @${data.botUsername} is now 100% 24/7 Active on Cloud Webhook!`;
+          loadBotsViaApi();
+        } else {
+          banner.innerText = "❌ Error: " + (data.error || "Failed");
+        }
+      } catch (e) {
+        banner.innerText = "⚠️ Network Error: " + e.message;
+      }
+    };
+
+    window.addForcePrompt = async function (botId) {
+      const chatId = prompt("Enter Public @username OR Private -100... Chat ID:");
+      if (!chatId) return;
+      const inviteLink = prompt("Enter Invite Link (Optional for Public, Required https://t.me/+... for Private):") || "";
+      await fetch("/api/bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add_force_channel", botId, chatId, inviteLink })
+      });
+      loadBotsViaApi();
+    };
+
+    window.updateUpiPrompt = async function (botId) {
+      const channelUnlockPrice = prompt("Enter Channel Unlock ₹ Price (e.g. 1):", "1");
+      const upiId = prompt("Enter Admin UPI ID for Top-Up:", "");
+      if (channelUnlockPrice === null) return;
+      await fetch("/api/bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_settings", botId, channelUnlockPrice, upiId })
+      });
+      loadBotsViaApi();
+    };
+
+    window.deleteBot = async function (botId) {
+      if (!confirm("Delete this 24/7 bot?")) return;
+      await fetch("/api/bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_bot", botId })
+      });
+      loadBotsViaApi();
+    };
+  </script>
+</body>
+</html>
