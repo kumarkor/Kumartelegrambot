@@ -1,18 +1,44 @@
 // ============================================================================
-// 👑 FILE: api/bot.js — KURMURYA 24/7 CLOUD WEBHOOK ENGINE (0% BUG EDITION) 👑
+// 👑 FILE: api/bot.js — KURMURYA 24/7 CLOUD WEBHOOK ENGINE (FULL UPDATED SUITE) 👑
 // Endpoint: https://kumartelegrambot.vercel.app/api/bot
-// Works 24/7 Non-Stop in 0.01s even when App & Phone are Switched OFF!
+// Includes:
+// - Exact 8-Button Photo Menu (Order View, Order Status, My Account, Daily Bonus,
+//   Refer & Earn, Redeem Code, Top Up, Help / Support) + Admin Panel
+// - All 4 Services in Order View:
+//   1. ❤️ Channel Reaction (All 73+ Official Emojis + Random + Top 8 Mix)
+//   2. 👀 Post Views
+//   3. 📊 Vote Poll
+//   4. 🔘 Line Vote (Channel Post Inline Button Clicker: Last/First/1,2,3/Mini-App)
+// - Custom Quantity Selector (1, 2, 3, 4, 5, 6... or ANY typed number / ALL)
+// - Mandatory ₹1 Channel Unlock Lock (Unlimited free orders after ₹1 unlock)
+// - Live Force-Join Checker (Public & Private Channels via getChatMember)
+// - Top-Up QR Code + UPI ID + Smart 12-Digit UTR Fail-Safe + Admin Approve/Reject
+// - 2-Way Help / Support Desk with Admin Direct Reply Button
 // ============================================================================
 
-const PRIMARY_FIREBASE_URL = "https://kurmuryatelegrambot-default-rtdb.firebaseio.com";
-const FALLBACK_FIREBASE_URL = "https://kumarkorapp-default-rtdb.asia-southeast1.firebasedatabase.app";
+const PRIMARY_FIREBASE_URL = "https://kumarkorapp-default-rtdb.asia-southeast1.firebasedatabase.app";
+const MIRROR_FIREBASE_URL = "https://kurmuryatelegrambot-default-rtdb.firebaseio.com";
 const SMM_PANEL_API_URL = "https://kumartelegrambot.vercel.app/api/panel";
 const WEBHOOK_BASE_URL = "https://kumartelegrambot.vercel.app/api/bot";
 const MASTER_ADMIN = "7335163273";
 const MASTER_PIN = "252010";
 
+// All 73+ Official Telegram Emoji Reactions Matrix
+const ALL_73_EMOJI_ROWS = [
+  [{ text: "🎲 RANDOM" }, { text: "🔥 TOP 8 MIX" }, { text: "❌ Cancel" }],
+  [{ text: "👍" }, { text: "👎" }, { text: "❤️" }, { text: "🔥" }, { text: "🥰" }, { text: "👏" }, { text: "😁" }, { text: "🤔" }],
+  [{ text: "🤯" }, { text: "😱" }, { text: "🤬" }, { text: "😢" }, { text: "🎉" }, { text: "🤩" }, { text: "🤮" }, { text: "💩" }],
+  [{ text: "🙏" }, { text: "👌" }, { text: "🕊️" }, { text: "🤡" }, { text: "🥱" }, { text: "🥴" }, { text: "😍" }, { text: "🐳" }],
+  [{ text: "❤️‍🔥" }, { text: "🌚" }, { text: "🌭" }, { text: "💯" }, { text: "🤣" }, { text: "⚡" }, { text: "🍌" }, { text: "🏆" }],
+  [{ text: "💔" }, { text: "🤨" }, { text: "😐" }, { text: "🍓" }, { text: "🍾" }, { text: "💋" }, { text: "🖕" }, { text: "😈" }],
+  [{ text: "😴" }, { text: "😭" }, { text: "🤓" }, { text: "👻" }, { text: "👨‍💻" }, { text: "👀" }, { text: "🎃" }, { text: "🙈" }],
+  [{ text: "😇" }, { text: "😨" }, { text: "🤝" }, { text: "✍️" }, { text: "🤗" }, { text: "🫡" }, { text: "🎅" }, { text: "🎄" }],
+  [{ text: "☃️" }, { text: "💅" }, { text: "🤪" }, { text: "🗿" }, { text: "🆒" }, { text: "💘" }, { text: "🙉" }, { text: "🦄" }],
+  [{ text: "😘" }, { text: "💊" }, { text: "🙊" }, { text: "😎" }, { text: "👾" }, { text: "🤷‍♂️" }, { text: "🤷" }, { text: "😡" }]
+];
+
 // ============================================================================
-// 1. FORMATTING & VALIDATION UTILITIES
+// 1. FORMATTING, PARSING & VALIDATION UTILITIES
 // ============================================================================
 function fmtRs(val) {
   const n = Number(val || 0);
@@ -51,6 +77,50 @@ function isBotAdmin(b, uid) {
   return false;
 }
 
+/**
+ * Parses Quantity typed or clicked by user (1, 2, 3, 4, 5, 6... or ALL)
+ */
+function parseQuantityInput(rawQty) {
+  const q = String(rawQty || "").trim().toUpperCase();
+  if (q === "ALL" || q === "ALL IDS" || q === "") return "";
+  const n = parseInt(q.replace(/\D/g, ""), 10);
+  if (isNaN(n) || n <= 0) return "";
+  return String(n);
+}
+
+/**
+ * Parses Line Vote inline button target (LAST, FIRST, ALL_MINIAPPS, or 1, 2, 3...)
+ */
+function parseLineVoteModeInput(rawBtnInput) {
+  const b = String(rawBtnInput || "").trim().toUpperCase();
+  if (b.includes("LAST")) return "LAST";
+  if (b.includes("FIRST")) return "FIRST";
+  if (b.includes("MINI-APP")) return "ALL_MINIAPPS";
+  const num = parseInt(b.replace(/\D/g, ""), 10);
+  if (!isNaN(num) && num > 0) return String(num);
+  return "LAST";
+}
+
+/**
+ * Parses 73+ Emoji Selection (Single Emoji, Multiple Space-Separated Emojis, RANDOM, or TOP 8 MIX)
+ */
+function parseEmojiSelectionInput(rawInput) {
+  const str = String(rawInput || "").trim();
+  if (str === "🎲 RANDOM" || str.toUpperCase() === "RANDOM") {
+    return { emoji: "RANDOM", emojiList: [], label: "🎲 RANDOM MIX (73+ Emojis)" };
+  }
+  if (str === "🔥 TOP 8 MIX") {
+    const top8 = ["🔥", "❤️", "🎉", "👍", "⚡", "💯", "🤩", "👏"];
+    return { emoji: "🔥", emojiList: top8, label: top8.join(" ") };
+  }
+  const parts = str.split(/[\s,]+/).filter(Boolean);
+  if (parts.length > 1) {
+    return { emoji: parts[0], emojiList: parts, label: parts.join(" ") };
+  }
+  const single = str || "🔥";
+  return { emoji: single, emojiList: [single], label: single };
+}
+
 // ============================================================================
 // 2. SMART FIREBASE REALTIME DATABASE HELPERS (ATOMIC READ/WRITE)
 // ============================================================================
@@ -73,26 +143,23 @@ async function fbRequest(baseUrl, path, method = "GET", data = null) {
 }
 
 /**
- * Automatically locates which Firebase DB holds this botId,
- * ensuring 100% compatibility with Channel.java!
+ * Automatically finds the Bot Node across Primary (`kumarkorapp`) and Mirror (`kurmuryatelegrambot`)
+ * Firebase Databases so 24/7 Cloud Webhook works seamlessly with Channel.java!
  */
 async function loadBotNodeFromCloud(botId) {
-  // 1. Check Primary Firebase (/kumar_cloud/bots/{botId})
   let node = await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${botId}`, "GET");
   if (node && (node.botConfig || node.token)) {
     return { dbUrl: PRIMARY_FIREBASE_URL, basePath: `kumar_cloud/bots/${botId}`, node };
   }
 
-  // 2. Check Primary Firebase (/unlimited_bots/{botId})
-  node = await fbRequest(PRIMARY_FIREBASE_URL, `unlimited_bots/${botId}`, "GET");
+  node = await fbRequest(MIRROR_FIREBASE_URL, `kumar_cloud/bots/${botId}`, "GET");
   if (node && (node.botConfig || node.token)) {
-    return { dbUrl: PRIMARY_FIREBASE_URL, basePath: `unlimited_bots/${botId}`, node };
+    return { dbUrl: MIRROR_FIREBASE_URL, basePath: `kumar_cloud/bots/${botId}`, node };
   }
 
-  // 3. Check Fallback Firebase (/kumar_cloud/bots/{botId})
-  node = await fbRequest(FALLBACK_FIREBASE_URL, `kumar_cloud/bots/${botId}`, "GET");
+  node = await fbRequest(MIRROR_FIREBASE_URL, `unlimited_bots/${botId}`, "GET");
   if (node && (node.botConfig || node.token)) {
-    return { dbUrl: FALLBACK_FIREBASE_URL, basePath: `kumar_cloud/bots/${botId}`, node };
+    return { dbUrl: MIRROR_FIREBASE_URL, basePath: `unlimited_bots/${botId}`, node };
   }
 
   return null;
@@ -107,7 +174,7 @@ async function saveBotConfig(dbUrl, basePath, botConfigObj) {
 }
 
 // ============================================================================
-// 3. TELEGRAM BOT API HELPERS (POST JSON - RELIABLE & FAST)
+// 3. TELEGRAM BOT API HELPERS
 // ============================================================================
 async function tgPost(token, method, payload = {}) {
   if (!token) return { ok: false };
@@ -177,7 +244,7 @@ async function answerCb(token, cbId, text, showAlert = false) {
 }
 
 // ============================================================================
-// 4. KEYBOARD BUILDERS (EXACT 8-BUTTON PHOTO UI + REACTION/POLL + ADMIN)
+// 4. KEYBOARD BUILDERS (PHOTO MENU + 4 SERVICES + 73+ EMOJIS + QUANTITY)
 // ============================================================================
 function buildMainPhotoKeyboard(isAdminUser) {
   const rows = [
@@ -193,14 +260,45 @@ function buildMainPhotoKeyboard(isAdminUser) {
 }
 
 function buildOrderSubKeyboard(channelUnlockPrice) {
+  // Includes all 4 requested services: Channel Reaction, Post Views, Vote Poll, Line Vote
   return {
     keyboard: [
-      [{ text: "❤️ Channel Reaction" }, { text: "📊 Vote Poll" }],
+      [{ text: "❤️ Channel Reaction" }, { text: "👀 Post Views" }],
+      [{ text: "📊 Vote Poll" }, { text: "🔘 Line Vote" }],
       [
         { text: `🔓 Set / Unlock Channel (₹${fmtRs(channelUnlockPrice)})` },
         { text: "📋 My Unlocked Channels" }
       ],
       [{ text: "🔙 Back to Main Menu" }]
+    ],
+    resize_keyboard: true
+  };
+}
+
+function buildAll73EmojiKeyboard() {
+  return {
+    keyboard: ALL_73_EMOJI_ROWS,
+    resize_keyboard: true
+  };
+}
+
+function buildQuantityKeyboard() {
+  return {
+    keyboard: [
+      [{ text: "1" }, { text: "2" }, { text: "3" }, { text: "4" }, { text: "5" }],
+      [{ text: "6" }, { text: "7" }, { text: "8" }, { text: "9" }, { text: "10" }],
+      [{ text: "15" }, { text: "20" }, { text: "ALL" }, { text: "❌ Cancel" }]
+    ],
+    resize_keyboard: true
+  };
+}
+
+function buildLineVoteModeKeyboard() {
+  return {
+    keyboard: [
+      [{ text: "🎯 LAST BUTTON (Shevatcha)" }, { text: "1️⃣ FIRST BUTTON (Pahila)" }],
+      [{ text: "1" }, { text: "2" }, { text: "3" }, { text: "4" }],
+      [{ text: "🎮 OPEN MINI-APP BUTTON" }, { text: "❌ Cancel" }]
     ],
     resize_keyboard: true
   };
@@ -224,17 +322,6 @@ function buildAdminKeyboard() {
 function buildCancelKeyboard() {
   return {
     keyboard: [[{ text: "❌ Cancel" }]],
-    resize_keyboard: true
-  };
-}
-
-function buildEmojiKeyboard() {
-  return {
-    keyboard: [
-      [{ text: "🔥" }, { text: "❤️" }, { text: "🎉" }, { text: "👍" }],
-      [{ text: "⚡" }, { text: "💯" }, { text: "🤩" }, { text: "👏" }],
-      [{ text: "RANDOM" }, { text: "❌ Cancel" }]
-    ],
     resize_keyboard: true
   };
 }
@@ -282,7 +369,7 @@ async function sendChannelLockedPrompt(token, uid, chKey, unlockPrice, bal) {
     `📢 <b>Target Channel:</b> <code>${escHtml(chKey)}</code>\n` +
     `🏷️ <b>One-Time Unlock Fee:</b> <code>₹${fmtRs(unlockPrice)}</code>\n` +
     `💰 <b>Your Balance:</b> <code>₹${fmtRs(bal)}</code>\n\n` +
-    `⚠️ <i>Reactions & Poll Votes will NOT go to ${escHtml(chKey)} until you unlock it for ₹${fmtRs(unlockPrice)}. Once unlocked, you can send UNLIMITED free Reactions & Poll Votes to this channel!</i>\n\n` +
+    `⚠️ <i>Reactions, Post Views, Poll Votes & Line Votes will NOT go to ${escHtml(chKey)} until you unlock it for ₹${fmtRs(unlockPrice)}. Once unlocked, you can send UNLIMITED free orders to this channel!</i>\n\n` +
     `👇 <b>Tap below to unlock this channel now:</b>`;
 
   await sendBotMsg(token, uid, msg, {
@@ -305,7 +392,7 @@ async function unlockChannelForUser(dbUrl, basePath, b, p, uid, chKey, isAdm) {
     await sendBotMsg(
       token,
       uid,
-      `✅ <b>Channel</b> <code>${escHtml(chKey)}</code> <b>is ALREADY Unlocked!</b>\nYou can send unlimited Reactions & Poll Votes to it now.`,
+      `✅ <b>Channel</b> <code>${escHtml(chKey)}</code> <b>is ALREADY Unlocked!</b>\nYou can send unlimited Reactions, Views, Poll Votes & Line Votes to it now.`,
       buildOrderSubKeyboard(unlockPrice)
     );
     return;
@@ -342,7 +429,7 @@ async function unlockChannelForUser(dbUrl, basePath, b, p, uid, chKey, isAdm) {
       `📢 <b>Unlocked Channel:</b> <code>${escHtml(chKey)}</code>\n` +
       `💸 <b>Deducted:</b> <code>-₹${fmtRs(unlockPrice)}</code>\n` +
       `💰 <b>Remaining Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
-      `🔥 <b>You can now send UNLIMITED ❤️ Channel Reactions & 📊 Poll Votes to</b> <code>${escHtml(chKey)}</code>!`,
+      `🔥 <b>You can now send UNLIMITED ❤️ 73+ Reactions, 👀 Post Views, 📊 Poll Votes & 🔘 Line Votes to</b> <code>${escHtml(chKey)}</code>!`,
     buildOrderSubKeyboard(unlockPrice)
   );
 }
@@ -427,6 +514,9 @@ function getOrInitPlayer(players, b, uid, name, uname) {
       tempTopupTime: 0,
       tempOrderLink: "",
       tempOrderChannel: "",
+      tempEmojiRaw: "RANDOM",
+      tempPollOpt: "1",
+      tempLineVoteMode: "LAST",
       tempSupportUid: "",
       tempPrivId: "",
       tempCodeName: "",
@@ -444,7 +534,6 @@ function getOrInitPlayer(players, b, uid, name, uname) {
     if (!Array.isArray(p.unlockedChannels)) p.unlockedChannels = [];
     if (!Array.isArray(p.orders)) p.orders = [];
     if (!Array.isArray(p.history)) p.history = [];
-    // Normalize legacy 'step' field if present
     if (!p.state && p.step) p.state = p.step;
     if (!p.state) p.state = "IDLE";
   }
@@ -452,9 +541,9 @@ function getOrInitPlayer(players, b, uid, name, uname) {
 }
 
 // ============================================================================
-// 8. EXECUTE REACTION & POLL ORDER VIA SMM PANEL API
+// 8. EXECUTE SMM ORDER WITH QUANTITY (REACTION, VIEWS, POLL, LINE VOTE)
 // ============================================================================
-async function executeReactionOrPollOrder(
+async function executeSmmOrderWithQuantity(
   dbUrl,
   basePath,
   b,
@@ -465,10 +554,14 @@ async function executeReactionOrPollOrder(
   chKey,
   apiAction,
   emoji,
-  pollOpt
+  emojiList,
+  pollOpt,
+  buttonTarget,
+  limitCount
 ) {
   const token = b.token;
   const unlockPrice = numOrDef(b.channelUnlockPrice, 1);
+  const qtyDisplay = limitCount ? limitCount : "ALL IDs";
 
   await sendBotMsg(
     token,
@@ -476,6 +569,7 @@ async function executeReactionOrPollOrder(
     `⏳ <b>PROCESSING ORDER ON UNLOCKED CHANNEL...</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `🛒 <b>Service:</b> ${escHtml(orderTitle)}\n` +
+      `🔢 <b>Quantity:</b> <code>${escHtml(qtyDisplay)}</code>\n` +
       `📢 <b>Channel:</b> <code>${escHtml(chKey)}</code> (🟢 Unlocked)\n` +
       `🎯 <b>Post:</b> <code>${escHtml(postLink)}</code>`,
     buildOrderSubKeyboard(unlockPrice)
@@ -486,10 +580,20 @@ async function executeReactionOrPollOrder(
       action: apiAction,
       webPin: MASTER_PIN,
       postLink: postLink,
-      selectedPhones: ["ALL"]
+      selectedPhones: ["ALL"],
+      limitCount: limitCount || ""
     };
-    if (apiAction === "send_reaction") payload.emoji = emoji;
-    if (apiAction === "vote_poll") payload.optionNumber = pollOpt;
+
+    if (apiAction === "send_reaction") {
+      payload.emoji = emoji || "RANDOM";
+      if (Array.isArray(emojiList) && emojiList.length > 0) {
+        payload.emojiList = emojiList;
+      }
+    } else if (apiAction === "vote_poll") {
+      payload.optionNumber = pollOpt || "1";
+    } else if (apiAction === "click_post_button") {
+      payload.buttonTarget = buttonTarget || "LAST";
+    }
 
     const res = await fetch(SMM_PANEL_API_URL, {
       method: "POST",
@@ -509,7 +613,7 @@ async function executeReactionOrPollOrder(
       date: timeStampStr()
     });
     if (p.orders.length > 15) p.orders = p.orders.slice(0, 15);
-    addHistory(p, `✅ ${orderTitle} (${ ordId }) on ${chKey}`);
+    addHistory(p, `✅ ${orderTitle} (${ordId}) on ${chKey}`);
 
     b.totalOrders = numOrDef(b.totalOrders, 0) + 1;
 
@@ -523,6 +627,7 @@ async function executeReactionOrPollOrder(
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🆔 <b>Order ID:</b> <code>${ordId}</code>\n` +
         `🛒 <b>Service:</b> ${escHtml(orderTitle)}\n` +
+        `🔢 <b>Quantity:</b> <code>${escHtml(qtyDisplay)}</code>\n` +
         `📢 <b>Unlocked Channel:</b> <code>${escHtml(chKey)}</code>\n` +
         `💰 <b>Charge:</b> <code>₹0 (Channel Unlocked!)</code>\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n${replyStr}`,
@@ -553,7 +658,7 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     return res.status(200).json({
       ok: true,
-      engine: "Kurmurya 24/7 Cloud Webhook Engine Active",
+      engine: "Kurmurya 24/7 Cloud Webhook Engine (73+ Emojis, Views, Poll, Line Vote & Quantity)",
       status: "24/7_ONLINE"
     });
   }
@@ -618,13 +723,16 @@ export default async function handler(req, res) {
         };
 
         await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "PUT", nodeToSave);
+        await fbRequest(MIRROR_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "PUT", nodeToSave);
+
         await sendBotMsg(
           token,
           owner,
           `👑 <b>24/7 CLOUD WEBHOOK CONNECTED!</b>\n\n` +
             `🤖 <b>Bot:</b> @${escHtml(uname)}\n` +
             `🆔 <b>Admin ID:</b> <code>${owner}</code>\n` +
-            `🔓 <b>Channel Unlock Rate:</b> <code>₹${fmtRs(cfg.channelUnlockPrice)} / Channel</code>\n\n` +
+            `🔓 <b>Channel Unlock Rate:</b> <code>₹${fmtRs(cfg.channelUnlockPrice)} / Channel</code>\n` +
+            `🔥 <b>Services:</b> <code>73+ Reactions, Views, Poll & Line Vote + Quantity</code>\n\n` +
             `👇 Send <b>/start</b> to open the Photo Menu & <b>👑 Admin Panel</b>!`,
           buildMainPhotoKeyboard(true)
         );
@@ -690,7 +798,6 @@ export default async function handler(req, res) {
     const players = node.playersMap || node.users || {};
     const topupRequests = node.topupRequests || {};
     const giftCodesMap = node.giftCodesMap || node.redeemCodes || {};
-    const supportTickets = node.supportTickets || {};
 
     const isCb = Boolean(upd.callback_query);
     const fromObj = isCb ? upd.callback_query.from : upd.message?.from;
@@ -889,7 +996,11 @@ export default async function handler(req, res) {
     }
 
     // 2. CANCEL / BACK / START COMMANDS
-    if (text.toLowerCase() === "❌ cancel" || text.toLowerCase() === "/cancel") {
+    if (
+      text.toLowerCase() === "❌ cancel" ||
+      text.toLowerCase() === "❌ cancel operation" ||
+      text.toLowerCase() === "/cancel"
+    ) {
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
       await sendBotMsg(token, cUid, "❌ <b>Operation Cancelled.</b>", mainKb);
@@ -907,7 +1018,7 @@ export default async function handler(req, res) {
         `👤 <b>User:</b> ${escHtml(cName)} (<code>${cUid}</code>)\n` +
         `💰 <b>Wallet Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
         `🔓 <b>Unlocked Channels:</b> <code>${uCount} Channel(s)</code>\n` +
-        `🏷️ <b>Channel Unlock Rate:</b> <code>₹${fmtRs(chUnlockPrice)} / Channel (Unlimited Reactions & Polls!)</code>\n\n` +
+        `🏷️ <b>Channel Unlock Rate:</b> <code>₹${fmtRs(chUnlockPrice)} / Channel (Unlimited 73+ Reactions, Views, Polls & Line Votes!)</code>\n\n` +
         `👇 <b>Select an option from the menu below:</b>`;
 
       await sendBotMsg(token, cUid, welcomeMsg, mainKb);
@@ -915,7 +1026,7 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // 3. TOP-LEVEL MENU BUTTONS (ALWAYS OVERRIDE ANY STUCK STATE!)
+    // 3. TOP-LEVEL PHOTO MENU BUTTONS & 4 ORDER SERVICES
     // ========================================================================
     if (text === "👁️ Order View") {
       p.state = "IDLE";
@@ -923,14 +1034,14 @@ export default async function handler(req, res) {
       const uCount = Array.isArray(p.unlockedChannels) ? p.unlockedChannels.length : 0;
 
       const msg =
-        `👁️ <b>ORDER VIEW — REACTION & POLL SUITE</b>\n` +
+        `👁️ <b>ORDER VIEW — REACTION, VIEWS, POLL & LINE VOTE</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `💰 <b>Your Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
         `🔓 <b>Unlocked Channels:</b> <code>${uCount}</code>\n\n` +
         `📌 <b>Mandatory ₹${fmtRs(chUnlockPrice)} Channel Rule:</b>\n` +
         `• Set/Unlock your channel once for <b>-₹${fmtRs(chUnlockPrice)}</b>.\n` +
-        `• Once unlocked, send <b>UNLIMITED ❤️ Channel Reactions & 📊 Poll Votes</b> to that channel for FREE!\n` +
-        `• Without unlocking a channel for ₹${fmtRs(chUnlockPrice)}, reactions/votes will not go to that channel.\n\n` +
+        `• Once unlocked, send <b>UNLIMITED ❤️ 73+ Reactions, 👀 Post Views, 📊 Poll Votes & 🔘 Line Votes</b> with custom Quantity (1, 2, 3, 4, 5...) for FREE!\n` +
+        `• Without unlocking a channel for ₹${fmtRs(chUnlockPrice)}, orders will not go to that channel.\n\n` +
         `👇 <b>Select a service below:</b>`;
 
       await sendBotMsg(token, cUid, msg, buildOrderSubKeyboard(chUnlockPrice));
@@ -971,6 +1082,7 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
+    // SERVICE 1: ❤️ Channel Reaction (All 73+ Emojis + Quantity)
     if (text === "❤️ Channel Reaction") {
       p.state = "WAIT_REACT_LINK";
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -978,9 +1090,27 @@ export default async function handler(req, res) {
       await sendBotMsg(
         token,
         cUid,
-        `❤️ <b>ORDER CHANNEL REACTION</b>\n` +
+        `❤️ <b>ORDER ALL 73+ CHANNEL REACTIONS</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `⚡ <i>Channel must be unlocked (₹${fmtRs(chUnlockPrice)}) first. Once unlocked, reactions are 100% FREE & Unlimited!</i>\n\n` +
+          `👇 <b>STEP 1 OF 3: Send your Channel Post Link:</b>\n` +
+          `• Example: <code>https://t.me/mychannel/105</code>`,
+        buildCancelKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    // SERVICE 2: 👀 Post Views (With Quantity)
+    if (text === "👀 Post Views") {
+      p.state = "WAIT_VIEWS_LINK";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `👀 <b>ORDER CHANNEL POST VIEWS</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ <i>Channel must be unlocked (₹${fmtRs(chUnlockPrice)}) first. Once unlocked, views are 100% FREE & Unlimited!</i>\n\n` +
           `👇 <b>STEP 1 OF 2: Send your Channel Post Link:</b>\n` +
           `• Example: <code>https://t.me/mychannel/105</code>`,
         buildCancelKeyboard()
@@ -988,6 +1118,7 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
+    // SERVICE 3: 📊 Vote Poll (With Option Number + Quantity)
     if (text === "📊 Vote Poll") {
       p.state = "WAIT_POLL_LINK";
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -998,8 +1129,26 @@ export default async function handler(req, res) {
         `📊 <b>ORDER VOTE POLL</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `⚡ <i>Channel must be unlocked (₹${fmtRs(chUnlockPrice)}) first. Once unlocked, poll votes are 100% FREE & Unlimited!</i>\n\n` +
-          `👇 <b>STEP 1 OF 2: Send your Telegram Poll Post Link:</b>\n` +
+          `👇 <b>STEP 1 OF 3: Send your Telegram Poll Post Link:</b>\n` +
           `• Example: <code>https://t.me/mychannel/108</code>`,
+        buildCancelKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    // SERVICE 4: 🔘 Line Vote (Channel Post Inline Button Clicker + Quantity)
+    if (text === "🔘 Line Vote") {
+      p.state = "WAIT_LINEVOTE_LINK";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `🔘 <b>ORDER LINE VOTE (POST INLINE BUTTON CLICKER)</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ <i>Channel must be unlocked (₹${fmtRs(chUnlockPrice)}) first. Once unlocked, Line Votes are 100% FREE & Unlimited!</i>\n\n` +
+          `👇 <b>STEP 1 OF 3: Send the Channel Post Link that has Inline Buttons:</b>\n` +
+          `• Example: <code>https://t.me/mychannel/105</code>`,
         buildCancelKeyboard()
       );
       return res.status(200).send("OK");
@@ -1011,7 +1160,7 @@ export default async function handler(req, res) {
       const ords = Array.isArray(p.orders) ? p.orders : [];
       let sb = `🔍 <b>MY ORDER STATUS & HISTORY</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
       if (ords.length === 0) {
-        sb += `📭 No Reaction or Poll orders placed yet! Tap <b>👁️ Order View</b> to start.`;
+        sb += `📭 No orders placed yet! Tap <b>👁️ Order View</b> to start.`;
       } else {
         ords.slice(0, 10).forEach((o, i) => {
           sb +=
@@ -1120,7 +1269,7 @@ export default async function handler(req, res) {
         `💳 <b>ADD FUNDS / TOP UP WALLET</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🏦 <b>UPI ID:</b> <code>${escHtml(upiId)}</code>\n` +
-        `🔓 <b>Channel Rate:</b> <code>₹${fmtRs(chUnlockPrice)} = 1 Channel (Unlimited Reactions & Polls)</code>\n\n` +
+        `🔓 <b>Channel Rate:</b> <code>₹${fmtRs(chUnlockPrice)} = 1 Channel (Unlimited Reactions, Views, Polls & Line Votes!)</code>\n\n` +
         `📌 <b>STEP 1 OF 2:</b>\n` +
         `Scan the QR Code or pay to the UPI ID above, then <b>send the Amount (₹) you paid</b> below (e.g. <code>10</code>):`;
 
@@ -1325,7 +1474,7 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // 5. MULTI-STEP WORKFLOWS (WITH SMART UTR FAIL-SAFE!)
+    // 5. MULTI-STEP WORKFLOWS (73+ EMOJIS + QUANTITY + LINE VOTE + TOPUP)
     // ========================================================================
     const st = String(p.state || "IDLE").toUpperCase();
 
@@ -1366,7 +1515,6 @@ export default async function handler(req, res) {
       await savePlayerState(dbUrl, basePath, cUid, p);
       await fbRequest(dbUrl, `${basePath}/topupRequests/${reqId}`, "PUT", reqObj);
 
-      // 1. Confirm to User
       await sendBotMsg(
         token,
         cUid,
@@ -1379,7 +1527,6 @@ export default async function handler(req, res) {
         mainKb
       );
 
-      // 2. Alert Admin with Approve & Reject Inline Buttons
       const admAlert =
         `💳 <b>NEW TOP-UP REQUEST RECEIVED!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -1449,7 +1596,7 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // ---- STEP: CHANNEL REACTION ----
+    // ---- FLOW 1: ❤️ CHANNEL REACTION (LINK -> ALL 73+ EMOJIS -> QUANTITY) ----
     if (st === "WAIT_REACT_LINK" || st === "WAIT_REACTION_POST_LINK") {
       const chKey = extractChannelKey(text);
       if (!chKey || !text.includes("t.me/")) {
@@ -1477,37 +1624,122 @@ export default async function handler(req, res) {
       await sendBotMsg(
         token,
         cUid,
-        `❤️ <b>CHANNEL UNLOCKED (${escHtml(chKey)}) — STEP 2 OF 2</b>\n` +
-          `👇 <b>Select Emoji Reaction below (or type RANDOM):</b>`,
-        buildEmojiKeyboard()
+        `❤️ <b>CHANNEL UNLOCKED (${escHtml(chKey)}) — STEP 2 OF 3</b>\n` +
+          `👇 <b>Select any Reaction from All 73+ Emojis below</b> (or tap <b>🎲 RANDOM</b> / <b>🔥 TOP 8 MIX</b>, or type multiple emojis separated by space):`,
+        buildAll73EmojiKeyboard()
       );
       return res.status(200).send("OK");
     }
 
     if (st === "WAIT_REACT_EMOJI" || st === "WAIT_REACTION_EMOJI") {
+      p.tempEmojiRaw = text || "RANDOM";
+      p.state = "WAIT_REACT_QTY";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `🔢 <b>STEP 3 OF 3: How many Reactions do you want?</b>\n` +
+          `👉 <b>Type any number (1, 2, 3, 4, 5, 6...)</b> or tap a quick button below:`,
+        buildQuantityKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    if (st === "WAIT_REACT_QTY") {
       const link = p.tempOrderLink || "";
       const chKey = p.tempOrderChannel || "";
-      const emoji = text || "RANDOM";
+      const parsedEm = parseEmojiSelectionInput(p.tempEmojiRaw || "RANDOM");
+      const limitCount = parseQuantityInput(text);
+      const qtyLabel = limitCount ? `${limitCount} Reactions` : "ALL IDs";
+
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
 
-      await executeReactionOrPollOrder(
+      await executeSmmOrderWithQuantity(
         dbUrl,
         basePath,
         b,
         p,
         cUid,
-        `❤️ Channel Reaction (${emoji})`,
+        `❤️ Channel Reaction (${parsedEm.label}) [${qtyLabel}]`,
         link,
         chKey,
         "send_reaction",
-        emoji,
-        ""
+        parsedEm.emoji,
+        parsedEm.emojiList,
+        "",
+        "LAST",
+        limitCount
       );
       return res.status(200).send("OK");
     }
 
-    // ---- STEP: VOTE POLL ----
+    // ---- FLOW 2: 👀 POST VIEWS (LINK -> QUANTITY) ----
+    if (st === "WAIT_VIEWS_LINK") {
+      const chKey = extractChannelKey(text);
+      if (!chKey || !text.includes("t.me/")) {
+        await sendBotMsg(
+          token,
+          cUid,
+          `❌ <b>Invalid Post Link!</b> Send a valid Channel Post Link (e.g. <code>https://t.me/mychannel/105</code>):`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (!isChannelUnlockedByUser(p, chKey)) {
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendChannelLockedPrompt(token, cUid, chKey, chUnlockPrice, p.balance);
+        return res.status(200).send("OK");
+      }
+
+      p.tempOrderLink = text;
+      p.tempOrderChannel = chKey;
+      p.state = "WAIT_VIEWS_QTY";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `👀 <b>CHANNEL UNLOCKED (${escHtml(chKey)}) — STEP 2 OF 2</b>\n` +
+          `🔢 <b>How many Views do you want?</b>\n` +
+          `👉 <b>Type any number (1, 2, 3, 4, 5, 6...)</b> or tap a button below:`,
+        buildQuantityKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    if (st === "WAIT_VIEWS_QTY") {
+      const link = p.tempOrderLink || "";
+      const chKey = p.tempOrderChannel || "";
+      const limitCount = parseQuantityInput(text);
+      const qtyLabel = limitCount ? `${limitCount} Views` : "ALL IDs";
+
+      p.state = "IDLE";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await executeSmmOrderWithQuantity(
+        dbUrl,
+        basePath,
+        b,
+        p,
+        cUid,
+        `👀 Post Views [${qtyLabel}]`,
+        link,
+        chKey,
+        "boost_views",
+        "",
+        [],
+        "",
+        "LAST",
+        limitCount
+      );
+      return res.status(200).send("OK");
+    }
+
+    // ---- FLOW 3: 📊 VOTE POLL (LINK -> OPTION NUMBER -> QUANTITY) ----
     if (st === "WAIT_POLL_LINK" || st === "WAIT_POLL_POST_LINK") {
       const chKey = extractChannelKey(text);
       if (!chKey || !text.includes("t.me/")) {
@@ -1535,7 +1767,7 @@ export default async function handler(req, res) {
       await sendBotMsg(
         token,
         cUid,
-        `📊 <b>CHANNEL UNLOCKED (${escHtml(chKey)}) — STEP 2 OF 2</b>\n` +
+        `📊 <b>CHANNEL UNLOCKED (${escHtml(chKey)}) — STEP 2 OF 3</b>\n` +
           `👇 <b>Send Poll Option Number to Vote (e.g. <code>1</code> or <code>2</code>):</b>`,
         buildCancelKeyboard()
       );
@@ -1553,23 +1785,125 @@ export default async function handler(req, res) {
         );
         return res.status(200).send("OK");
       }
+      p.tempPollOpt = opt;
+      p.state = "WAIT_POLL_QTY";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `🔢 <b>STEP 3 OF 3: How many Poll Votes do you want?</b>\n` +
+          `👉 <b>Type any number (1, 2, 3, 4, 5, 6...)</b> or tap a button below:`,
+        buildQuantityKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    if (st === "WAIT_POLL_QTY") {
       const link = p.tempOrderLink || "";
       const chKey = p.tempOrderChannel || "";
+      const opt = p.tempPollOpt || "1";
+      const limitCount = parseQuantityInput(text);
+      const qtyLabel = limitCount ? `${limitCount} Votes` : "ALL IDs";
+
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
 
-      await executeReactionOrPollOrder(
+      await executeSmmOrderWithQuantity(
         dbUrl,
         basePath,
         b,
         p,
         cUid,
-        `📊 Vote Poll (Option #${opt})`,
+        `📊 Vote Poll (Option #${opt}) [${qtyLabel}]`,
         link,
         chKey,
         "vote_poll",
         "",
-        opt
+        [],
+        opt,
+        "LAST",
+        limitCount
+      );
+      return res.status(200).send("OK");
+    }
+
+    // ---- FLOW 4: 🔘 LINE VOTE (POST INLINE BUTTON CLICKER: LINK -> BUTTON -> QUANTITY) ----
+    if (st === "WAIT_LINEVOTE_LINK") {
+      const chKey = extractChannelKey(text);
+      if (!chKey || !text.includes("t.me/")) {
+        await sendBotMsg(
+          token,
+          cUid,
+          `❌ <b>Invalid Post Link!</b> Send a valid Channel Post Link (e.g. <code>https://t.me/mychannel/105</code>):`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (!isChannelUnlockedByUser(p, chKey)) {
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendChannelLockedPrompt(token, cUid, chKey, chUnlockPrice, p.balance);
+        return res.status(200).send("OK");
+      }
+
+      p.tempOrderLink = text;
+      p.tempOrderChannel = chKey;
+      p.state = "WAIT_LINEVOTE_MODE";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `🔘 <b>CHANNEL UNLOCKED (${escHtml(chKey)}) — STEP 2 OF 3</b>\n` +
+          `👇 <b>Which Inline Button on the post should be clicked for Line Vote?</b>\n` +
+          `Tap <b>🎯 LAST BUTTON (Shevatcha)</b>, <b>1️⃣ FIRST BUTTON (Pahila)</b>, or send button number (<code>1, 2, 3...</code>):`,
+        buildLineVoteModeKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    if (st === "WAIT_LINEVOTE_MODE") {
+      p.tempLineVoteMode = parseLineVoteModeInput(text);
+      p.state = "WAIT_LINEVOTE_QTY";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `🔢 <b>STEP 3 OF 3: How many Line Votes (Button Clicks) do you want?</b>\n` +
+          `👉 <b>Type any number (1, 2, 3, 4, 5, 6...)</b> or tap a button below:`,
+        buildQuantityKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    if (st === "WAIT_LINEVOTE_QTY") {
+      const link = p.tempOrderLink || "";
+      const chKey = p.tempOrderChannel || "";
+      const btnMode = p.tempLineVoteMode || "LAST";
+      const limitCount = parseQuantityInput(text);
+      const qtyLabel = limitCount ? `${limitCount} Line Votes` : "ALL IDs";
+
+      p.state = "IDLE";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await executeSmmOrderWithQuantity(
+        dbUrl,
+        basePath,
+        b,
+        p,
+        cUid,
+        `🔘 Line Vote (Btn: ${btnMode}) [${qtyLabel}]`,
+        link,
+        chKey,
+        "click_post_button",
+        "",
+        [],
+        "",
+        btnMode,
+        limitCount
       );
       return res.status(200).send("OK");
     }
