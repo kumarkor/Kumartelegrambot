@@ -8,6 +8,17 @@ const PasswordHelper = require("telegram/Password");
 const DB_URL = "https://kumartelegrambot-default-rtdb.firebaseio.com";
 const MASTER_PIN = "252010";
 
+const ALL_TELEGRAM_REACTIONS = [
+  "👍", "👎", "❤️", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱",
+  "🤬", "😢", "🎉", "🤩", "🤮", "💩", "🙏", "👌", "🕊️", "🤡",
+  "🥱", "🥴", "😍", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "🤣", "⚡",
+  "🍌", "🏆", "💔", "🤨", "😐", "🍓", "🍾", "💋", "🖕", "😈",
+  "😴", "😭", "🤓", "👻", "👨‍💻", "👀", "🎃", "🙈", "😇", "😨",
+  "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "☃️", "💅", "🤪", "🗿",
+  "🆒", "💘", "🙉", "🦄", "😘", "💊", "🙊", "😎", "👾", "🤷‍♂️",
+  "🤷", "🤷‍♀️", "😡"
+];
+
 async function fbGet(path) {
   try {
     const response = await fetch(DB_URL + "/" + path + ".json");
@@ -108,7 +119,7 @@ function parseTelegramPostLink(rawLink) {
     };
   }
   const slashParts = clean.replace("@", "").split("/");
-  if (slashParts.length >= 2 && !isNaN(parseInt(slashParts[1], 10))) {
+  if (slashParts.length >= 2 && /^\d+$/.test(slashParts[1].split("?")[0])) {
     return {
       peer: slashParts[0],
       msgId: parseInt(slashParts[1], 10)
@@ -117,21 +128,31 @@ function parseTelegramPostLink(rawLink) {
   return null;
 }
 
-// Parses https://t.me/BotName?start=PARAM or @BotName
-function parseBotReferralInput(rawInput, explicitParam) {
+// Parses Bot Links, Mini-App Links (t.me/Bot/app?startapp=123), or @BotName
+function parseBotAndMiniAppInput(rawInput, explicitParam) {
   const str = String(rawInput || "").trim();
   let botUser = str;
+  let appShortName = "";
   let startParam = String(explicitParam || "").trim();
+  let isDirectUrl = false;
 
   if (str.indexOf("t.me/") !== -1) {
     const afterTme = str.split("t.me/")[1];
     const qParts = afterTme.split("?");
-    botUser = qParts[0].replace("/", "").trim();
+    const pathSegments = qParts[0].split("/").filter(Boolean);
+
+    botUser = (pathSegments[0] || "").trim();
+    if (pathSegments.length >= 2 && !/^\d+$/.test(pathSegments[1])) {
+      appShortName = pathSegments[1].trim();
+    }
+
     if (qParts[1]) {
       const urlParams = new URLSearchParams(qParts[1]);
-      if (urlParams.get("start")) startParam = urlParams.get("start");
-      else if (urlParams.get("startapp")) startParam = urlParams.get("startapp");
+      if (urlParams.get("startapp")) startParam = urlParams.get("startapp");
+      else if (urlParams.get("start")) startParam = urlParams.get("start");
     }
+  } else if (str.startsWith("http://") || str.startsWith("https://")) {
+    isDirectUrl = true;
   } else if (str.indexOf(" ") !== -1 && !startParam) {
     const sp = str.split(/\s+/);
     botUser = sp[0];
@@ -139,20 +160,260 @@ function parseBotReferralInput(rawInput, explicitParam) {
   }
 
   botUser = botUser.replace("@", "").trim();
-  return { botUser: botUser, startParam: startParam };
+  return {
+    botUser: botUser,
+    appShortName: appShortName,
+    startParam: startParam,
+    isDirectUrl: isDirectUrl,
+    rawUrl: str
+  };
 }
 
-// Filter accounts based on UI checkboxes
-function filterTargetAccounts(allAccounts, selectedPhones) {
-  if (!Array.isArray(selectedPhones) || selectedPhones.length === 0) {
-    return allAccounts;
+// Filter accounts based on UI checkboxes AND apply user's requested quantity limit (e.g. 1, 5, 7, ALL)
+function filterTargetAccounts(allAccounts, selectedPhones, limitCount) {
+  let filtered = allAccounts;
+  if (Array.isArray(selectedPhones) && selectedPhones.length > 0 && selectedPhones.indexOf("ALL") === -1) {
+    filtered = allAccounts.filter(function (acc) {
+      return selectedPhones.indexOf(acc.phone) !== -1;
+    });
   }
-  if (selectedPhones.indexOf("ALL") !== -1) {
-    return allAccounts;
+  const numLimit = parseInt(String(limitCount || "").trim(), 10);
+  if (!isNaN(numLimit) && numLimit > 0 && numLimit < filtered.length) {
+    return filtered.slice(0, numLimit);
   }
-  return allAccounts.filter(function (acc) {
-    return selectedPhones.indexOf(acc.phone) !== -1;
-  });
+  return filtered;
+}
+
+// Extract flat array of inline buttons from a Telegram Message
+function extractInlineButtonsFromMessage(msg) {
+  const buttons = [];
+  if (!msg || !msg.replyMarkup || !Array.isArray(msg.replyMarkup.rows)) {
+    return buttons;
+  }
+  let flatIndex = 0;
+  for (let r = 0; r < msg.replyMarkup.rows.length; r++) {
+    const row = msg.replyMarkup.rows[r];
+    if (!row || !Array.isArray(row.buttons)) continue;
+    for (let b = 0; b < row.buttons.length; b++) {
+      const btn = row.buttons[b];
+      if (!btn) continue;
+      flatIndex++;
+      let btnType = "UNKNOWN";
+      const cls = String(btn.className || "");
+      if (cls.indexOf("WebView") !== -1) btnType = "MINI_APP_WEBVIEW";
+      else if (btn.url && (btn.url.indexOf("startapp=") !== -1 || /t\.me\/[A-Za-z0-9_]+\/[A-Za-z0-9_]+/.test(btn.url))) btnType = "MINI_APP_LINK";
+      else if (btn.url) btnType = "URL_BUTTON";
+      else if (btn.data) btnType = "CALLBACK_BUTTON";
+
+      buttons.push({
+        index: flatIndex,
+        row: r + 1,
+        col: b + 1,
+        text: btn.text || ("Button #" + flatIndex),
+        type: btnType,
+        className: cls,
+        url: btn.url || "",
+        data: btn.data || null,
+        buttonId: btn.buttonId || null,
+        rawButton: btn
+      });
+    }
+  }
+  return buttons;
+}
+
+// Helper to open a Mini-App or execute an Inline Button on a message
+async function executeInlineButtonOrMiniApp(client, peerEntity, msgId, targetBtn, fallbackBotEntity, startParam) {
+  let actionSummary = "";
+  const rawBtn = targetBtn.rawButton;
+  const cls = String(targetBtn.className || "");
+
+  // 1. Direct WebView / Mini-App Button (KeyboardButtonWebView / KeyboardButtonSimpleWebView)
+  if (cls.indexOf("WebView") !== -1 || (targetBtn.url && targetBtn.type === "MINI_APP_WEBVIEW")) {
+    const botPeer = fallbackBotEntity || peerEntity;
+    try {
+      await client.invoke(
+        new Api.messages.RequestWebView({
+          peer: peerEntity,
+          bot: botPeer,
+          platform: "android",
+          fromBotMenu: false,
+          url: targetBtn.url || undefined,
+          startParam: startParam || undefined
+        })
+      );
+      return "🎮 Opened Mini-App WebView [" + targetBtn.text + "]";
+    } catch (wvErr) {
+      if (Api.messages.RequestSimpleWebView && targetBtn.url) {
+        await client.invoke(
+          new Api.messages.RequestSimpleWebView({
+            bot: botPeer,
+            url: targetBtn.url,
+            platform: "android"
+          })
+        );
+        return "🎮 Opened Simple Mini-App [" + targetBtn.text + "]";
+      }
+      throw wvErr;
+    }
+  }
+
+  // 2. Callback Inline Button (KeyboardButtonCallback)
+  if (targetBtn.data) {
+    let cbResult = null;
+    try {
+      cbResult = await client.invoke(
+        new Api.messages.GetBotCallbackAnswer({
+          peer: peerEntity,
+          msgId: Number(msgId),
+          data: targetBtn.data
+        })
+      );
+    } catch (cbErr) {
+      if (cbErr.message && cbErr.message.indexOf("TIMEOUT") !== -1) {
+        return "👆 Clicked Callback Button [" + targetBtn.text + "]";
+      }
+      throw cbErr;
+    }
+
+    actionSummary = "👆 Clicked Inline Button [" + targetBtn.text + "]";
+    if (cbResult && cbResult.message) {
+      actionSummary += " (Bot Alert: " + cbResult.message + ")";
+    }
+    if (cbResult && cbResult.url) {
+      // If callback returned a Mini-App URL or game URL, open it!
+      try {
+        await openMiniAppByUrl(client, peerEntity, fallbackBotEntity, cbResult.url, startParam);
+        actionSummary += " + 🎮 Opened Mini-App URL";
+      } catch (e) {}
+    }
+    return actionSummary;
+  }
+
+  // 3. URLAuth Button (KeyboardButtonUrlAuth)
+  if (cls.indexOf("UrlAuth") !== -1 || targetBtn.buttonId !== null) {
+    try {
+      const authReq = await client.invoke(
+        new Api.messages.RequestUrlAuth({
+          peer: peerEntity,
+          msgId: Number(msgId),
+          buttonId: Number(targetBtn.buttonId || 0),
+          url: targetBtn.url || undefined
+        })
+      );
+      if (authReq && authReq.className === "UrlAuthResultRequest") {
+        await client.invoke(
+          new Api.messages.AcceptUrlAuth({
+            writeAllowed: true,
+            peer: peerEntity,
+            msgId: Number(msgId),
+            buttonId: Number(targetBtn.buttonId || 0),
+            url: targetBtn.url || undefined
+          })
+        );
+      }
+      return "🔐 Authorized & Opened Button [" + targetBtn.text + "]";
+    } catch (e) {}
+  }
+
+  // 4. URL Button (t.me Mini-App Link, Bot Link, or External WebView URL)
+  if (targetBtn.url) {
+    const openedInfo = await openMiniAppByUrl(client, peerEntity, fallbackBotEntity, targetBtn.url, startParam);
+    return "🔗 [" + targetBtn.text + "] -> " + openedInfo;
+  }
+
+  return "✅ Triggered Button [" + targetBtn.text + "]";
+}
+
+// Helper to open any Telegram Mini-App URL (t.me/bot/app?startapp=... or https://...)
+async function openMiniAppByUrl(client, peerEntity, fallbackBotEntity, rawUrl, extraStartParam) {
+  const parsed = parseBotAndMiniAppInput(rawUrl, extraStartParam);
+
+  // Case A: It is a t.me/BotUser/app?startapp=... or t.me/BotUser?start=... link
+  if (parsed.botUser && !parsed.isDirectUrl) {
+    const botEntity = await client.getInputEntity(parsed.botUser);
+
+    // 1. Try RequestAppWebView if shortName is present (e.g. t.me/BotUser/appname)
+    if (parsed.appShortName && Api.messages.RequestAppWebView && Api.InputBotAppShortName) {
+      try {
+        await client.invoke(
+          new Api.messages.RequestAppWebView({
+            peer: botEntity,
+            app: new Api.InputBotAppShortName({
+              botId: botEntity,
+              shortName: parsed.appShortName
+            }),
+            startParam: parsed.startParam || undefined,
+            platform: "android",
+            writeAllowed: true
+          })
+        );
+        return "🎮 Opened Mini-App (@" + parsed.botUser + "/" + parsed.appShortName + ")";
+      } catch (e1) {}
+    }
+
+    // 2. Try RequestMainWebView
+    if (Api.messages.RequestMainWebView) {
+      try {
+        await client.invoke(
+          new Api.messages.RequestMainWebView({
+            peer: botEntity,
+            bot: botEntity,
+            startParam: parsed.startParam || undefined,
+            platform: "android"
+          })
+        );
+        return "🎮 Opened Main Mini-App (@" + parsed.botUser + ")";
+      } catch (e2) {}
+    }
+
+    // 3. Try RequestWebView
+    try {
+      await client.invoke(
+        new Api.messages.RequestWebView({
+          peer: botEntity,
+          bot: botEntity,
+          platform: "android",
+          fromBotMenu: true,
+          startParam: parsed.startParam || undefined
+        })
+      );
+      return "🎮 Opened Bot WebView (@" + parsed.botUser + ")";
+    } catch (e3) {}
+
+    // 4. Fallback: Start the bot with startParam
+    if (parsed.startParam) {
+      await client.invoke(
+        new Api.messages.StartBot({
+          bot: botEntity,
+          peer: botEntity,
+          startParam: String(parsed.startParam),
+          randomId: BigInt(Math.floor(Math.random() * 1000000000000))
+        })
+      );
+      return "🤖 Started Bot @" + parsed.botUser + " (" + parsed.startParam + ")";
+    } else {
+      await client.sendMessage(botEntity, { message: "/start" });
+      return "🤖 Sent /start to @" + parsed.botUser;
+    }
+  }
+
+  // Case B: Direct HTTPS WebApp URL
+  const botTarget = fallbackBotEntity || peerEntity;
+  try {
+    await client.invoke(
+      new Api.messages.RequestWebView({
+        peer: peerEntity,
+        bot: botTarget,
+        url: rawUrl,
+        platform: "android",
+        fromBotMenu: false
+      })
+    );
+    return "🌐 Opened WebView URL (" + rawUrl.substring(0, 35) + "...)";
+  } catch (e) {
+    return "🔗 Processed URL (" + rawUrl.substring(0, 35) + "...)";
+  }
 }
 
 // ============================================================================
@@ -164,7 +425,7 @@ function renderMasterWebPanel() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>👑 KUMAR QUANTUM SMM & MULTI-ID AUTOMATION SUITE 👑</title>
+  <title>👑 KUMAR QUANTUM SMM &amp; MULTI-ID AUTOMATION SUITE 👑</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
@@ -727,7 +988,7 @@ function renderMasterWebPanel() {
     }
 
     /* ========================================================================
-       GLASS PANELS, INPUTS & BUTTONS
+       GLASS PANELS, INPUTS, QUANTITY PICKERS & FULL 73+ EMOJI GRID
        ======================================================================== */
     .two-col-layout {
       display: grid;
@@ -822,26 +1083,94 @@ function renderMasterWebPanel() {
       box-shadow: 0 0 16px var(--accent-glow);
     }
 
-    .emoji-picker-row {
+    /* QUANTITY SELECTOR BAR (1, 5, 7, 10, ALL + CUSTOM INPUT) */
+    .qty-control-row {
       display: flex;
-      flex-wrap: wrap;
+      align-items: center;
       gap: 6px;
+      flex-wrap: wrap;
       margin-bottom: 12px;
+      background: rgba(8, 3, 22, 0.75);
+      border: 1px solid var(--border-glass);
+      padding: 8px 10px;
+      border-radius: 12px;
     }
 
-    .emoji-btn {
+    .qty-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-secondary);
+      margin-right: 4px;
+    }
+
+    .qty-preset-btn {
       background: var(--bg-input);
       border: 1px solid var(--border-glass);
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-size: 18px;
+      color: var(--accent-main);
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      font-weight: 800;
       cursor: pointer;
       transition: 0.15s;
     }
 
-    .emoji-btn.active-emoji, .emoji-btn:hover {
+    .qty-preset-btn:hover, .qty-preset-btn.active-qty {
+      background: var(--accent-main);
+      color: #05010d;
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .qty-custom-inp {
+      width: 78px;
+      padding: 5px 8px;
+      background: #04010a;
+      border: 1.5px solid var(--accent-main);
+      border-radius: 8px;
+      color: #ffffff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+      outline: none;
+    }
+
+    /* ALL 73+ TELEGRAM EMOJI REACTIONS GRID */
+    .emoji-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+      gap: 6px;
+      max-height: 185px;
+      overflow-y: auto;
+      padding: 8px;
+      background: var(--bg-input);
+      border: 1.5px solid var(--border-glass);
+      border-radius: 14px;
+      margin-bottom: 10px;
+    }
+
+    .emoji-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 6px 0;
+      font-size: 19px;
+      cursor: pointer;
+      transition: 0.15s;
+      text-align: center;
+      user-select: none;
+    }
+
+    .emoji-btn.active-emoji {
+      border-color: var(--success);
+      background: rgba(16, 185, 129, 0.25);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+      transform: scale(1.08);
+    }
+
+    .emoji-btn:hover {
       border-color: var(--accent-main);
-      background: rgba(245, 158, 11, 0.2);
       transform: scale(1.08);
     }
 
@@ -1166,8 +1495,8 @@ function renderMasterWebPanel() {
       <div class="royal-brand">
         <div class="royal-emblem">👑</div>
         <div class="royal-title-block">
-          <h1>TELEGRAM MASTER SMM &amp; AUTOMATION SUITE</h1>
-          <p>15+ IDs • Anti-Logout Engine • Rejoin ID • Views • Reactions • Comments • Polls • OTP Reader</p>
+          <h1>TELEGRAM MASTER SMM &amp; MINI-APP AUTOMATION SUITE</h1>
+          <p>All 73+ Reactions • Quantity Control (1/5/7/ALL) • Mini-App Opener • Last Button Clicker • Channel Button Clicker</p>
         </div>
       </div>
       <div class="header-actions">
@@ -1210,7 +1539,7 @@ function renderMasterWebPanel() {
     <div class="selector-bar">
       <div class="selector-top">
         <div class="selector-title">
-          🎯 TARGET ACCOUNT SELECTOR (CLICK TO SELECT / DESELECT ACCOUNTS FOR ANY ACTION)
+          🎯 TARGET ACCOUNT SELECTOR (CLICK ANY ID TO SELECT / DESELECT FOR MINI-APP, BUTTON CLICK OR REACTIONS)
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="action-btn btn-cyan btn-mini" id="btn-check-health">🩺 CHECK ALL IDs HEALTH</button>
@@ -1226,10 +1555,10 @@ function renderMasterWebPanel() {
     <!-- 6 MASTER NAVIGATION TABS -->
     <div class="command-tabs">
       <button type="button" class="cmd-tab active-tab" data-target="pane-smm">
-        🛒 1. SMM PANEL (VIEWS/REACT/POLL/COMMENT)
+        🛒 1. ALL REACTIONS, VIEWS &amp; POST BUTTONS
       </button>
       <button type="button" class="cmd-tab" data-target="pane-bots">
-        🤖 2. BOT REFERRAL &amp; BLOCK BOT
+        🎮 2. BOT MINI-APP &amp; LAST BUTTON OPENER
       </button>
       <button type="button" class="cmd-tab" data-target="pane-otp-online">
         📩 3. LIVE OTP READER &amp; ONLINE
@@ -1254,54 +1583,29 @@ function renderMasterWebPanel() {
           <button type="button" class="action-btn btn-ghost btn-mini" id="btn-sync-now">🔄 REFRESH</button>
         </div>
       </div>
-      <div class="console-screen" id="console-box">👑 [QUANTUM SMM SUITE READY]: Anti-Logout Engine &amp; Triple-Fallback 777000 OTP Reader Active!</div>
+      <div class="console-screen" id="console-box">👑 [QUANTUM SMM &amp; MINI-APP SUITE READY]: All 73+ Reactions, Quantity Limiters (1/5/7/ALL), Mini-App Opener &amp; Inline Button Clicker Active!</div>
     </div>
 
     <!-- ====================================================================
-         PANE 1: SMM PANEL SERVICE SUITE (VIEWS, REACTIONS, COMMENTS, POLLS, COMBO)
+         PANE 1: SMM PANEL SERVICE SUITE (ALL 73+ REACTIONS, VIEWS, INLINE BUTTON CLICKER, COMMENTS, POLLS)
          ==================================================================== -->
     <div id="pane-smm" class="view-pane active-pane">
       <div class="helper-alert">
-        🛒 <b>SMM PANEL SERVICE SUITE:</b> Boost any Telegram Channel or Group post using your selected accounts! Paste the Post Link (e.g. <code>https://t.me/channelname/123</code>) in any module below.
+        🛒 <b>SMM PANEL + QUANTITY CONTROL + CHANNEL INLINE BUTTON CLICKER:</b> Choose how many reactions/views/clicks you want (<b>1, 5, 7, 10, ALL</b> or type any number!), select from <b>All 73+ Official Telegram Reactions</b> (or <b>🎲 Random Mix</b>), or click any inline button on a Channel Post!
       </div>
 
       <div class="two-col-layout">
-        <!-- MODULE A: AUTO POST VIEWS BOOSTER -->
+        <!-- MODULE A: ALL 73+ EMOJI REACTIONS + QUANTITY SELECTOR -->
         <div class="glass-panel">
           <div class="panel-top">
-            <div class="panel-heading">👀 AUTO POST VIEWS BOOSTER</div>
-            <span class="badge-chip">ALL SELECTED IDs</span>
+            <div class="panel-heading">❤️ ALL 73+ POST EMOJI REACTIONS</div>
+            <span class="badge-chip">MULTI-SELECT + RANDOM</span>
           </div>
+
           <div class="field-block">
             <div class="field-title">
               <label>TELEGRAM POST LINK</label>
               <span>PUBLIC / PRIVATE</span>
-            </div>
-            <input
-              type="text"
-              id="inp-views-link"
-              class="royal-input"
-              placeholder="e.g. https://t.me/mychannel/105"
-            />
-          </div>
-          <button type="button" class="action-btn btn-cyan" id="btn-boost-views">
-            👀 BOOST POST VIEWS NOW (SELECTED IDs)
-          </button>
-          <p style="font-size: 11.5px; color: var(--text-dim);">
-            ⚡ Increments the official eye counter (👁️) on the target post from every selected account.
-          </p>
-        </div>
-
-        <!-- MODULE B: AUTO POST EMOJI REACTIONS -->
-        <div class="glass-panel">
-          <div class="panel-top">
-            <div class="panel-heading">❤️ AUTO POST EMOJI REACTIONS</div>
-            <span class="badge-chip">INSTANT REACTION</span>
-          </div>
-          <div class="field-block">
-            <div class="field-title">
-              <label>TELEGRAM POST LINK</label>
-              <span>REQUIRED</span>
             </div>
             <input
               type="text"
@@ -1310,35 +1614,136 @@ function renderMasterWebPanel() {
               placeholder="e.g. https://t.me/mychannel/105"
             />
           </div>
+
           <div class="field-block">
             <div class="field-title">
-              <label>SELECT EMOJI REACTION (OR RANDOM MIX)</label>
-              <span id="selected-emoji-label">🔥</span>
+              <label>HOW MANY REACTIONS DO YOU WANT? (QUANTITY)</label>
+              <span>1 / 5 / 7 / ALL</span>
             </div>
-            <div class="emoji-picker-row" id="emoji-picker">
-              <button type="button" class="emoji-btn active-emoji" data-emoji="🔥">🔥</button>
-              <button type="button" class="emoji-btn" data-emoji="❤️">❤️</button>
-              <button type="button" class="emoji-btn" data-emoji="🎉">🎉</button>
-              <button type="button" class="emoji-btn" data-emoji="👍">👍</button>
-              <button type="button" class="emoji-btn" data-emoji="⚡">⚡</button>
-              <button type="button" class="emoji-btn" data-emoji="💯">💯</button>
-              <button type="button" class="emoji-btn" data-emoji="🤩">🤩</button>
-              <button type="button" class="emoji-btn" data-emoji="👏">👏</button>
-              <button type="button" class="emoji-btn" data-emoji="RANDOM">🎲 MIX</button>
+            <div class="qty-control-row" data-for="inp-react-count">
+              <span class="qty-label">🔢 COUNT:</span>
+              <button type="button" class="qty-preset-btn" data-val="1">1</button>
+              <button type="button" class="qty-preset-btn" data-val="5">5</button>
+              <button type="button" class="qty-preset-btn" data-val="7">7</button>
+              <button type="button" class="qty-preset-btn" data-val="10">10</button>
+              <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+              <input type="number" id="inp-react-count" class="qty-custom-inp" placeholder="ALL" min="1" />
             </div>
           </div>
+
+          <div class="field-block">
+            <div class="field-title">
+              <label>SELECT 1, MULTIPLE, OR RANDOM EMOJIS (73+ REACTIONS)</label>
+              <span id="selected-emoji-label">🔥</span>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+              <button type="button" class="action-btn btn-royal-purple btn-mini" id="btn-emoji-random">🎲 RANDOM MIX (ALL POPULAR)</button>
+              <button type="button" class="action-btn btn-emerald btn-mini" id="btn-emoji-select-top">🔥 TOP 8 VIRAL MIX</button>
+              <button type="button" class="action-btn btn-ghost btn-mini" id="btn-emoji-clear">🔄 RESET TO 🔥</button>
+            </div>
+            <div class="emoji-picker-grid" id="emoji-picker-grid"></div>
+          </div>
+
           <button type="button" class="action-btn btn-royal-purple" id="btn-send-reactions">
-            ❤️ SEND EMOJI REACTIONS (SELECTED IDs)
+            ❤️ SEND EMOJI REACTIONS NOW
+          </button>
+        </div>
+
+        <!-- MODULE B: CHANNEL POST INLINE BUTTON CLICKER + AUTO POST VIEWS -->
+        <div class="glass-panel">
+          <div class="panel-top">
+            <div class="panel-heading">🔘 CHANNEL POST INLINE BUTTON CLICKER</div>
+            <span class="badge-chip">CLICK ANY / LAST BUTTON</span>
+          </div>
+
+          <div class="helper-alert" style="margin-bottom:10px;">
+            👆 Paste any Channel or Group Post Link below. Your selected IDs will press the <b>Inline Button</b> (Callback, URL, or Mini-App button) on that post!
+          </div>
+
+          <div class="field-block">
+            <div class="field-title">
+              <label>CHANNEL / GROUP POST LINK</label>
+              <span>WITH INLINE BUTTONS</span>
+            </div>
+            <input
+              type="text"
+              id="inp-post-btn-link"
+              class="royal-input"
+              placeholder="e.g. https://t.me/mychannel/105"
+            />
+          </div>
+
+          <div class="field-block">
+            <div class="field-title">
+              <label>WHICH INLINE BUTTON TO PRESS ON POST?</label>
+              <span>SELECT TARGET</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <select id="sel-post-btn-target" class="royal-select" style="flex:1;">
+                <option value="LAST">🎯 LAST INLINE BUTTON (Saglyat Shevatcha Button)</option>
+                <option value="FIRST">1️⃣ FIRST INLINE BUTTON (1st Button)</option>
+                <option value="ALL_MINIAPPS">🎮 OPEN MINI-APP / WEBVIEW BUTTON ON POST</option>
+                <option value="CUSTOM">🔢 SPECIFIC BUTTON NUMBER (Enter # on right)</option>
+              </select>
+              <input type="number" id="inp-post-btn-custom-num" class="royal-input" style="max-width:85px;text-align:center;" value="1" min="1" title="Button Number" />
+            </div>
+          </div>
+
+          <div class="qty-control-row" data-for="inp-post-btn-count">
+            <span class="qty-label">🔢 HOW MANY IDs:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-post-btn-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+            <button type="button" class="action-btn btn-ghost" id="btn-scan-post-btns">
+              🔍 SCAN POST BUTTONS
+            </button>
+            <button type="button" class="action-btn btn-emerald" id="btn-click-post-btn">
+              👆 PRESS POST BUTTON NOW
+            </button>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 14px 0;" />
+
+          <!-- AUTO POST VIEWS BOOSTER WITH QUANTITY -->
+          <div class="panel-top" style="margin-bottom:10px;padding-bottom:8px;">
+            <div class="panel-heading">👀 AUTO POST VIEWS BOOSTER</div>
+            <span class="badge-chip">CUSTOM COUNT</span>
+          </div>
+          <div class="field-block">
+            <input
+              type="text"
+              id="inp-views-link"
+              class="royal-input"
+              placeholder="Paste Post Link for Views (e.g. https://t.me/mychannel/105)"
+            />
+          </div>
+          <div class="qty-control-row" data-for="inp-views-count">
+            <span class="qty-label">👁️ VIEWS COUNT:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-views-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
+          <button type="button" class="action-btn btn-cyan" id="btn-boost-views">
+            👀 BOOST POST VIEWS NOW
           </button>
         </div>
       </div>
 
       <div class="two-col-layout">
-        <!-- MODULE C: AUTO CHANNEL COMMENTER -->
+        <!-- MODULE C: AUTO CHANNEL COMMENTER WITH QUANTITY -->
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">💬 AUTO CHANNEL COMMENTER</div>
-            <span class="badge-chip">MULTI-COMMENT</span>
+            <span class="badge-chip">CUSTOM COUNT</span>
           </div>
           <div class="field-block">
             <div class="field-title">
@@ -1363,16 +1768,25 @@ function renderMasterWebPanel() {
               placeholder="Superb post bro 🔥&#10;100% Trusted channel 💯&#10;Awesome update! ❤️&#10;Best service ever 🚀"
             ></textarea>
           </div>
+          <div class="qty-control-row" data-for="inp-comment-count">
+            <span class="qty-label">💬 COMMENTS COUNT:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-comment-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
           <button type="button" class="action-btn btn-emerald" id="btn-post-comments">
-            💬 AUTO POST COMMENTS ACROSS SELECTED IDs
+            💬 AUTO POST COMMENTS NOW
           </button>
         </div>
 
-        <!-- MODULE D: AUTO POLL VOTER & SMM COMBO -->
+        <!-- MODULE D: AUTO POLL VOTER & SMM COMBO WITH QUANTITY -->
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">📊 AUTO POLL VOTER</div>
-            <span class="badge-chip">VOTE BOOSTER</span>
+            <span class="badge-chip">CUSTOM COUNT</span>
           </div>
           <div class="field-block">
             <div class="field-title">
@@ -1400,8 +1814,17 @@ function renderMasterWebPanel() {
               max="10"
             />
           </div>
+          <div class="qty-control-row" data-for="inp-poll-count">
+            <span class="qty-label">📊 VOTES COUNT:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-poll-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
           <button type="button" class="action-btn btn-gold" id="btn-vote-poll">
-            📊 AUTO VOTE POLL OPTION (SELECTED IDs)
+            📊 AUTO VOTE POLL OPTION NOW
           </button>
 
           <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 14px 0;" />
@@ -1417,26 +1840,94 @@ function renderMasterWebPanel() {
               placeholder="Paste Post Link (e.g. https://t.me/channel/105)"
             />
           </div>
+          <div class="qty-control-row" data-for="inp-combo-count">
+            <span class="qty-label">🚀 COMBO COUNT:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-combo-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
           <button type="button" class="action-btn btn-royal-purple" id="btn-smm-combo">
-            🚀 LAUNCH SMM MEGA COMBO (JOIN + VIEWS + 🔥 REACT)
+            🚀 LAUNCH SMM MEGA COMBO
           </button>
         </div>
       </div>
     </div>
 
     <!-- ====================================================================
-         PANE 2: AUTO BOT REFERRAL (/start) & BLOCK / UNBLOCK BOT
+         PANE 2: BOT MINI-APP OPENER + LAST INLINE BUTTON CLICKER + REFERRAL & BLOCK
          ==================================================================== -->
     <div id="pane-bots" class="view-pane">
+      <div class="helper-alert">
+        🎮 <b>BOT MINI-APP AUTO OPENER &amp; LAST INLINE BUTTON CLICKER:</b> Paste any Bot Link, Mini-App Link (e.g. <code>https://t.me/BotName/app?startapp=...</code> or <code>https://t.me/BotName?start=...</code>) below! The selected accounts will start the bot, check if there is a <b>Mini-App</b> or <b>Inline Buttons</b>, automatically open the <b>Mini-App</b>, and press the <b>LAST Inline Button</b>!
+      </div>
+
       <div class="two-col-layout">
-        <!-- AUTO BOT REFERRAL BOOSTER -->
+        <!-- NEW MODULE: BOT MINI-APP & LAST INLINE BUTTON AUTO-OPENER -->
+        <div class="glass-panel" style="border-color: var(--success);">
+          <div class="panel-top">
+            <div class="panel-heading">🎮 BOT MINI-APP &amp; LAST INLINE BUTTON OPENER</div>
+            <span class="badge-chip">AUTO MINI-APP + LAST BTN</span>
+          </div>
+
+          <div class="field-block">
+            <div class="field-title">
+              <label>PASTE ANY BOT LINK / MINI-APP LINK / @BOTUSERNAME</label>
+              <span>*REQUIRED</span>
+            </div>
+            <input
+              type="text"
+              id="inp-miniapp-link"
+              class="royal-input"
+              placeholder="e.g. https://t.me/SomeBot?start=123 or https://t.me/SomeBot/app?startapp=123"
+            />
+          </div>
+
+          <div class="field-block">
+            <div class="field-title">
+              <label>INLINE BUTTON &amp; MINI-APP ACTION MODE</label>
+              <span>DEFAULT: LAST BUTTON</span>
+            </div>
+            <select id="sel-miniapp-btn-mode" class="royal-select">
+              <option value="LAST">🎯 OPEN MINI-APP + CLICK LAST INLINE BUTTON (Saglyat Shevatcha Button)</option>
+              <option value="MINIAPP_ONLY">🎮 ONLY OPEN MINI-APP (RequestWebView / RequestAppWebView)</option>
+              <option value="FIRST">1️⃣ OPEN MINI-APP + CLICK 1st INLINE BUTTON</option>
+              <option value="ALL_BUTTONS">💥 CLICK ALL INLINE BUTTONS + OPEN MINI-APP</option>
+            </select>
+          </div>
+
+          <div class="field-block">
+            <div class="field-title">
+              <label>SELECT SPECIFIC ID OR USE SELECTED IDs ABOVE</label>
+              <span>ACCOUNT PICKER</span>
+            </div>
+            <select id="sel-miniapp-account" class="royal-select">
+              <option value="SELECTED">🎯 USE SELECTED IDs FROM TOP BAR</option>
+            </select>
+          </div>
+
+          <div class="qty-control-row" data-for="inp-miniapp-count">
+            <span class="qty-label">🔢 HOW MANY IDs TO OPEN:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-miniapp-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
+
+          <button type="button" class="action-btn btn-emerald" id="btn-open-miniapp-now">
+            🎮 CHECK BOT, OPEN MINI-APP &amp; CLICK LAST BUTTON NOW
+          </button>
+        </div>
+
+        <!-- AUTO BOT REFERRAL BOOSTER & BLOCK BOT -->
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">🤖 AUTO BOT REFERRAL BOOSTER (/start)</div>
-            <span class="badge-chip">SELECTED IDs</span>
-          </div>
-          <div class="helper-alert">
-            🔗 Paste your full referral link (e.g. <code>https://t.me/EarningBot?start=123456</code>) OR enter the Bot <code>@username</code> and Referral Code separately. All selected accounts above will trigger <code>/start</code> with your referral payload!
+            <span class="badge-chip">CUSTOM COUNT</span>
           </div>
           <div class="field-block">
             <div class="field-title">
@@ -1462,33 +1953,34 @@ function renderMasterWebPanel() {
               placeholder="e.g. 8879628170 (leave blank if full link pasted)"
             />
           </div>
-          <button type="button" class="action-btn btn-emerald" id="btn-start-bot-ref">
-            🤖 AUTO /START BOT FROM SELECTED ACCOUNTS
+          <div class="qty-control-row" data-for="inp-bot-ref-count">
+            <span class="qty-label">🤖 REFERRALS COUNT:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-bot-ref-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
+          <button type="button" class="action-btn btn-gold" id="btn-start-bot-ref">
+            🤖 AUTO /START BOT FROM ACCOUNTS
           </button>
-        </div>
 
-        <!-- BLOCK / UNBLOCK BOT (ALL IDs) -->
-        <div class="glass-panel">
-          <div class="panel-top">
-            <div class="panel-heading">🚫 BLOCK / UNBLOCK BOT (ALL SELECTED IDs)</div>
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 14px 0;" />
+
+          <div class="panel-top" style="margin-bottom:8px;padding-bottom:6px;">
+            <div class="panel-heading">🚫 BLOCK / UNBLOCK BOT</div>
             <span class="badge-chip">ANTI-SPAM</span>
           </div>
-          <div class="helper-alert" style="border-color: var(--danger);">
-            🚫 Stop unwanted bots from spamming your accounts! Enter the Bot's <code>@username</code> below to instantly <b>Block &amp; Delete Chat History</b> or <b>Unblock</b> across all selected accounts.
-          </div>
           <div class="field-block">
-            <div class="field-title">
-              <label>TARGET BOT @USERNAME</label>
-              <span>*REQUIRED</span>
-            </div>
             <input
               type="text"
               id="inp-block-bot-user"
               class="royal-input"
-              placeholder="e.g. @SpammerBot"
+              placeholder="Enter Target Bot @username (e.g. @SpammerBot)"
             />
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <button type="button" class="action-btn btn-crimson" id="btn-block-bot">
               🚫 BLOCK &amp; DELETE CHAT
             </button>
@@ -1677,7 +2169,7 @@ function renderMasterWebPanel() {
         <div class="glass-panel">
           <div class="panel-top">
             <div class="panel-heading">📥 JOIN CHANNEL (AUTOMATIC)</div>
-            <span class="badge-chip">SELECTED IDs</span>
+            <span class="badge-chip">CUSTOM COUNT</span>
           </div>
           <div class="field-block">
             <div class="field-title">
@@ -1691,8 +2183,17 @@ function renderMasterWebPanel() {
               placeholder="e.g. @mychannel or https://t.me/+AbCdEfG"
             />
           </div>
+          <div class="qty-control-row" data-for="inp-join-count">
+            <span class="qty-label">📥 JOIN COUNT:</span>
+            <button type="button" class="qty-preset-btn" data-val="1">1</button>
+            <button type="button" class="qty-preset-btn" data-val="5">5</button>
+            <button type="button" class="qty-preset-btn" data-val="7">7</button>
+            <button type="button" class="qty-preset-btn" data-val="10">10</button>
+            <button type="button" class="qty-preset-btn active-qty" data-val="ALL">ALL IDs</button>
+            <input type="number" id="inp-join-count" class="qty-custom-inp" placeholder="ALL" min="1" />
+          </div>
           <button type="button" class="action-btn btn-emerald" id="btn-join-channel">
-            📥 AUTO JOIN CHANNEL (SELECTED IDs)
+            📥 AUTO JOIN CHANNEL NOW
           </button>
         </div>
 
@@ -1745,7 +2246,7 @@ function renderMasterWebPanel() {
          ==================================================================== -->
     <div id="pane-accounts" class="view-pane">
       <div class="helper-alert">
-        ⚡ <b>DEDICATED API_ID &amp; API_HASH + 1-CLICK REJOIN SYSTEM:</b> Every account's <code>API_ID</code> and <code>API_HASH</code> is saved in Firebase. If any ID ever logs out, simply click <b>🔄 REJOIN / RE-LOGIN</b> next to that account in the table below — it will auto-fill the <code>API_ID</code>, <code>API_HASH</code>, and <code>Phone Number</code> so you only have to enter the OTP &amp; 2FA password!
+        ⚡ <b>DEDICATED API_ID &amp; API_HASH + 1-CLICK REJOIN SYSTEM:</b> Every account's <code>API_ID</code> and <code>API_HASH</code> is saved in Firebase. If any ID ever logs out, simply click <b>🔄 REJOIN / RE-LOGIN</b> next to that account in the table below!
       </div>
 
       <div class="two-col-layout">
@@ -1910,7 +2411,6 @@ function renderMasterWebPanel() {
   <script>
     var globalAccountsList = [];
 
-    // Global helper so dynamically rendered buttons inside OTP Reader or Table can open Rejoin Modal
     window.triggerAccountRejoin = function (phoneStr) {
       var found = null;
       for (var i = 0; i < globalAccountsList.length; i++) {
@@ -1951,11 +2451,23 @@ function renderMasterWebPanel() {
       var accountsList = [];
       var channelsList = [];
       var selectedPhones = [];
-      var chosenEmoji = "🔥";
+      var selectedEmojis = ["🔥"];
+      var isRandomEmojiMode = false;
       var showFullApiHashes = false;
       var accountHealthMap = {};
       var onlineHeartbeatTimer = null;
       var groupAdLoopTimer = null;
+
+      var ALL_EMOJIS = [
+        "👍", "👎", "❤️", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱",
+        "🤬", "😢", "🎉", "🤩", "🤮", "💩", "🙏", "👌", "🕊️", "🤡",
+        "🥱", "🥴", "😍", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "🤣", "⚡",
+        "🍌", "🏆", "💔", "🤨", "😐", "🍓", "🍾", "💋", "🖕", "😈",
+        "😴", "😭", "🤓", "👻", "👨‍💻", "👀", "🎃", "🙈", "😇", "😨",
+        "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "☃️", "💅", "🤪", "🗿",
+        "🆒", "💘", "🙉", "🦄", "😘", "💊", "🙊", "😎", "👾", "🤷‍♂️",
+        "🤷", "🤷‍♀️", "😡"
+      ];
 
       var AudioCtx = window.AudioContext || window.webkitAudioContext;
       var soundCtx = AudioCtx ? new AudioCtx() : null;
@@ -2001,6 +2513,91 @@ function renderMasterWebPanel() {
           msgHtml +
           "</div>" +
           box.innerHTML;
+      }
+
+      // ====================================================================
+      // RENDER ALL 73+ TELEGRAM EMOJI REACTIONS GRID & QUANTITY PRESETS
+      // ====================================================================
+      function renderEmojiGrid() {
+        var grid = document.getElementById("emoji-picker-grid");
+        var lbl = document.getElementById("selected-emoji-label");
+        if (!grid) return;
+        grid.innerHTML = "";
+
+        for (var i = 0; i < ALL_EMOJIS.length; i++) {
+          (function (em) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            var isAct = !isRandomEmojiMode && selectedEmojis.indexOf(em) !== -1;
+            btn.className = "emoji-btn" + (isAct ? " active-emoji" : "");
+            btn.textContent = em;
+            btn.addEventListener("click", function () {
+              beep(680, "sine", 0.04);
+              isRandomEmojiMode = false;
+              var idx = selectedEmojis.indexOf(em);
+              if (idx !== -1) {
+                if (selectedEmojis.length > 1) selectedEmojis.splice(idx, 1);
+              } else {
+                selectedEmojis.push(em);
+              }
+              renderEmojiGrid();
+            });
+            grid.appendChild(btn);
+          })(ALL_EMOJIS[i]);
+        }
+
+        if (lbl) {
+          lbl.textContent = isRandomEmojiMode
+            ? "🎲 RANDOM MIX (ALL REACTIONS)"
+            : selectedEmojis.join(" ");
+        }
+      }
+
+      renderEmojiGrid();
+
+      document.getElementById("btn-emoji-random").addEventListener("click", function () {
+        isRandomEmojiMode = true;
+        renderEmojiGrid();
+        toast("🎲 Random Reaction Mode Activated!", "#ec4899");
+      });
+
+      document.getElementById("btn-emoji-select-top").addEventListener("click", function () {
+        isRandomEmojiMode = false;
+        selectedEmojis = ["🔥", "❤️", "🎉", "👍", "⚡", "💯", "🤩", "👏"];
+        renderEmojiGrid();
+        toast("🔥 Top 8 Viral Reactions Selected!", "#10b981");
+      });
+
+      document.getElementById("btn-emoji-clear").addEventListener("click", function () {
+        isRandomEmojiMode = false;
+        selectedEmojis = ["🔥"];
+        renderEmojiGrid();
+      });
+
+      // Bind all Quantity Preset Bars (1, 5, 7, 10, ALL)
+      var qtyRows = document.querySelectorAll(".qty-control-row[data-for]");
+      for (var qIdx = 0; qIdx < qtyRows.length; qIdx++) {
+        (function (rowEl) {
+          var targetInpId = rowEl.getAttribute("data-for");
+          var targetInp = document.getElementById(targetInpId);
+          var btns = rowEl.querySelectorAll(".qty-preset-btn");
+          for (var b = 0; b < btns.length; b++) {
+            btns[b].addEventListener("click", function () {
+              beep(620, "sine", 0.04);
+              for (var k = 0; k < btns.length; k++) btns[k].classList.remove("active-qty");
+              this.classList.add("active-qty");
+              var v = this.getAttribute("data-val");
+              if (targetInp) {
+                targetInp.value = v === "ALL" ? "" : v;
+              }
+            });
+          }
+          if (targetInp) {
+            targetInp.addEventListener("input", function () {
+              for (var k = 0; k < btns.length; k++) btns[k].classList.remove("active-qty");
+            });
+          }
+        })(qtyRows[qIdx]);
       }
 
       // ====================================================================
@@ -2118,7 +2715,7 @@ function renderMasterWebPanel() {
       } catch (e) {}
 
       // ====================================================================
-      // TABS, EMOJI PICKER, THEME & CLOCK
+      // TABS, THEME & CLOCK
       // ====================================================================
       var tabBtns = document.querySelectorAll(".cmd-tab[data-target]");
       for (var t = 0; t < tabBtns.length; t++) {
@@ -2134,18 +2731,6 @@ function renderMasterWebPanel() {
           }
           document.getElementById(targetId).classList.add("active-pane");
           this.classList.add("active-tab");
-        });
-      }
-
-      var emojiBtns = document.querySelectorAll("#emoji-picker .emoji-btn");
-      for (var eIdx = 0; eIdx < emojiBtns.length; eIdx++) {
-        emojiBtns[eIdx].addEventListener("click", function () {
-          for (var j = 0; j < emojiBtns.length; j++) {
-            emojiBtns[j].classList.remove("active-emoji");
-          }
-          this.classList.add("active-emoji");
-          chosenEmoji = this.getAttribute("data-emoji");
-          document.getElementById("selected-emoji-label").textContent = chosenEmoji;
         });
       }
 
@@ -2165,6 +2750,7 @@ function renderMasterWebPanel() {
       function renderAccountSelectorChips() {
         var wrap = document.getElementById("account-selector-chips");
         var otpSel = document.getElementById("sel-otp-account");
+        var miniAppSel = document.getElementById("sel-miniapp-account");
         var quickReloginSel = document.getElementById("sel-quick-relogin");
         if (!wrap) return;
 
@@ -2191,6 +2777,18 @@ function renderMasterWebPanel() {
             otpSel.appendChild(opt);
           }
           if (currentOtpVal) otpSel.value = currentOtpVal;
+        }
+
+        if (miniAppSel) {
+          var curMiniVal = miniAppSel.value;
+          miniAppSel.innerHTML = '<option value="SELECTED">🎯 USE SELECTED IDs FROM TOP BAR (' + selectedPhones.length + ' IDs)</option>';
+          for (var ma = 0; ma < accountsList.length; ma++) {
+            var optMa = document.createElement("option");
+            optMa.value = accountsList[ma].phone;
+            optMa.textContent = "👤 ONLY #" + (ma + 1) + " " + (accountsList[ma].name || "User") + " (" + accountsList[ma].phone + ")";
+            miniAppSel.appendChild(optMa);
+          }
+          if (curMiniVal) miniAppSel.value = curMiniVal;
         }
 
         if (quickReloginSel) {
@@ -2268,7 +2866,8 @@ function renderMasterWebPanel() {
       // ====================================================================
       async function sendApiRequest(action, extraData) {
         extraData = extraData || {};
-        writeConsole("⏳ <b>Executing [" + action.toUpperCase() + "] on " + (selectedPhones.length || "ALL") + " IDs...</b>");
+        var countLabel = extraData.limitCount ? (extraData.limitCount + " IDs") : ((selectedPhones.length || "ALL") + " IDs");
+        writeConsole("⏳ <b>Executing [" + action.toUpperCase() + "] on " + countLabel + "...</b>");
         try {
           var payload = {
             action: action,
@@ -2455,8 +3054,9 @@ function renderMasterWebPanel() {
 
       document.getElementById("btn-rejoin-verify-otp").addEventListener("click", function () {
         var code = document.getElementById("rejoin-otp-code").value.trim();
+        var twoFa = document.getElementById("rejoin-2fa-pass").value.trim();
         if (!code) return toast("⚠️ Enter the 5-digit OTP!", "#f43f5e");
-        sendApiRequest("verify_code", { input: code }).then(function (res) {
+        sendApiRequest("verify_code", { input: code, twoFaPassword: twoFa }).then(function (res) {
           if (res && res.nextStep !== "wait_2fa" && res.reply && res.reply.indexOf("CONNECTED") !== -1) {
             document.getElementById("rejoin-modal-overlay").classList.add("vault-open");
             toast("🎉 ID Reconnected Successfully!", "#10b981");
@@ -2534,55 +3134,106 @@ function renderMasterWebPanel() {
       }
 
       // ====================================================================
-      // BIND ALL 11+ FEATURE BUTTONS
+      // BIND ALL SMM, MINI-APP & INLINE BUTTON CLICKER ACTIONS
       // ====================================================================
 
-      // 1. SMM: Boost Post Views
+      // 1. SMM: Boost Post Views (With Quantity Limit)
       document.getElementById("btn-boost-views").addEventListener("click", function () {
         var link = document.getElementById("inp-views-link").value.trim();
+        var cnt = document.getElementById("inp-views-count").value.trim();
         if (!link) return toast("⚠️ Enter a valid Post Link!", "#f43f5e");
-        sendApiRequest("boost_views", { postLink: link });
+        sendApiRequest("boost_views", { postLink: link, limitCount: cnt });
       });
 
-      // 2. SMM: Auto Post Emoji Reactions
+      // 2. SMM: Auto Post Emoji Reactions (All 73+ Reactions + Multi-Select + Random + Quantity)
       document.getElementById("btn-send-reactions").addEventListener("click", function () {
         var link = document.getElementById("inp-react-link").value.trim();
+        var cnt = document.getElementById("inp-react-count").value.trim();
         if (!link) return toast("⚠️ Enter a valid Post Link!", "#f43f5e");
-        sendApiRequest("send_reaction", { postLink: link, emoji: chosenEmoji });
+        sendApiRequest("send_reaction", {
+          postLink: link,
+          emoji: isRandomEmojiMode ? "RANDOM" : selectedEmojis[0],
+          emojiList: isRandomEmojiMode ? [] : selectedEmojis,
+          limitCount: cnt
+        });
       });
 
-      // 3. SMM: Auto Channel Commenter
+      // 3. SMM: Channel Post Inline Button Scanner & Clicker
+      document.getElementById("btn-scan-post-btns").addEventListener("click", function () {
+        var link = document.getElementById("inp-post-btn-link").value.trim();
+        if (!link) return toast("⚠️ Enter Channel Post Link first!", "#f43f5e");
+        sendApiRequest("inspect_post_buttons", { postLink: link });
+      });
+
+      document.getElementById("btn-click-post-btn").addEventListener("click", function () {
+        var link = document.getElementById("inp-post-btn-link").value.trim();
+        var targetMode = document.getElementById("sel-post-btn-target").value;
+        var customNum = document.getElementById("inp-post-btn-custom-num").value.trim();
+        var cnt = document.getElementById("inp-post-btn-count").value.trim();
+        if (!link) return toast("⚠️ Enter Channel Post Link first!", "#f43f5e");
+        sendApiRequest("click_post_button", {
+          postLink: link,
+          buttonTarget: targetMode === "CUSTOM" ? customNum : targetMode,
+          limitCount: cnt
+        });
+      });
+
+      // 4. SMM: Auto Channel Commenter (With Quantity Limit)
       document.getElementById("btn-post-comments").addEventListener("click", function () {
         var link = document.getElementById("inp-comment-link").value.trim();
         var commentsRaw = document.getElementById("inp-comment-list").value.trim();
+        var cnt = document.getElementById("inp-comment-count").value.trim();
         if (!link || !commentsRaw) return toast("⚠️ Enter Post Link and Comments!", "#f43f5e");
-        sendApiRequest("post_comments", { postLink: link, comments: commentsRaw });
+        sendApiRequest("post_comments", { postLink: link, comments: commentsRaw, limitCount: cnt });
       });
 
-      // 4. SMM: Auto Poll Voter
+      // 5. SMM: Auto Poll Voter (With Quantity Limit)
       document.getElementById("btn-vote-poll").addEventListener("click", function () {
         var link = document.getElementById("inp-poll-link").value.trim();
         var optNum = document.getElementById("inp-poll-option").value.trim();
+        var cnt = document.getElementById("inp-poll-count").value.trim();
         if (!link) return toast("⚠️ Enter Poll Post Link!", "#f43f5e");
-        sendApiRequest("vote_poll", { postLink: link, optionNumber: optNum });
+        sendApiRequest("vote_poll", { postLink: link, optionNumber: optNum, limitCount: cnt });
       });
 
-      // 5. SMM: 1-Click Mega Combo (Join + Views + Reaction)
+      // 6. SMM: 1-Click Mega Combo (Join + Views + Reaction + Quantity Limit)
       document.getElementById("btn-smm-combo").addEventListener("click", function () {
         var link = document.getElementById("inp-smm-combo-link").value.trim();
+        var cnt = document.getElementById("inp-combo-count").value.trim();
         if (!link) return toast("⚠️ Enter Post Link for SMM Combo!", "#f43f5e");
-        sendApiRequest("smm_combo", { postLink: link, emoji: chosenEmoji });
+        sendApiRequest("smm_combo", {
+          postLink: link,
+          emoji: isRandomEmojiMode ? "RANDOM" : selectedEmojis[0],
+          emojiList: isRandomEmojiMode ? [] : selectedEmojis,
+          limitCount: cnt
+        });
       });
 
-      // 6. Bot Referral Booster (/start)
+      // 7. NEW: Bot Mini-App Opener & Last Inline Button Clicker
+      document.getElementById("btn-open-miniapp-now").addEventListener("click", function () {
+        var link = document.getElementById("inp-miniapp-link").value.trim();
+        var btnMode = document.getElementById("sel-miniapp-btn-mode").value;
+        var specificAcc = document.getElementById("sel-miniapp-account").value;
+        var cnt = document.getElementById("inp-miniapp-count").value.trim();
+        if (!link) return toast("⚠️ Paste a Bot or Mini-App Link first!", "#f43f5e");
+        sendApiRequest("bot_miniapp_opener", {
+          botInput: link,
+          buttonMode: btnMode,
+          targetPhone: specificAcc,
+          limitCount: cnt
+        });
+      });
+
+      // 8. Bot Referral Booster (/start) (With Quantity Limit)
       document.getElementById("btn-start-bot-ref").addEventListener("click", function () {
         var refLink = document.getElementById("inp-bot-ref-link").value.trim();
         var refParam = document.getElementById("inp-bot-ref-param").value.trim();
+        var cnt = document.getElementById("inp-bot-ref-count").value.trim();
         if (!refLink) return toast("⚠️ Enter Bot Referral Link or @username!", "#f43f5e");
-        sendApiRequest("bot_referral", { botInput: refLink, startParam: refParam });
+        sendApiRequest("bot_referral", { botInput: refLink, startParam: refParam, limitCount: cnt });
       });
 
-      // 7. Block / Unblock Bot
+      // 9. Block / Unblock Bot
       document.getElementById("btn-block-bot").addEventListener("click", function () {
         var botU = document.getElementById("inp-block-bot-user").value.trim();
         if (!botU) return toast("⚠️ Enter Target Bot @username!", "#f43f5e");
@@ -2595,14 +3246,14 @@ function renderMasterWebPanel() {
         sendApiRequest("block_bot", { botUsername: botU, blockMode: "unblock" });
       });
 
-      // 8. Live OTP Reader (777000)
+      // 10. Live OTP Reader (777000)
       document.getElementById("btn-read-otp").addEventListener("click", function () {
         var targetAcc = document.getElementById("sel-otp-account").value;
         document.getElementById("otp-reader-result").innerHTML = "⏳ <b>Scanning Telegram Service (777000) via Triple-Fallback Engine...</b>";
         sendApiRequest("read_otp", { targetPhone: targetAcc });
       });
 
-      // 9. Always Online Status (ON / OFF + 24/7 Heartbeat Loop)
+      // 11. Always Online Status (ON / OFF + 24/7 Heartbeat Loop)
       document.getElementById("btn-set-online").addEventListener("click", function () {
         sendApiRequest("set_online", { online: true }).then(function () {
           document.getElementById("metric-online-state").textContent = "🟢 ONLINE";
@@ -2642,7 +3293,7 @@ function renderMasterWebPanel() {
         }
       });
 
-      // 10. Group Auto Poster (Ad Spammer) + Auto Loop Timer
+      // 12. Group Auto Poster (Ad Spammer) + Auto Loop Timer
       function runGroupPosterOnce() {
         var groups = document.getElementById("inp-group-targets").value.trim();
         var adMsg = document.getElementById("inp-group-ad-msg").value.trim();
@@ -2671,7 +3322,7 @@ function renderMasterWebPanel() {
         }
       });
 
-      // 11. Bulk DM Sender
+      // 13. Bulk DM Sender
       document.getElementById("btn-send-bulk-dm").addEventListener("click", function () {
         var targets = document.getElementById("inp-dm-targets").value.trim();
         var dmText = document.getElementById("inp-dm-text").value.trim();
@@ -2680,11 +3331,12 @@ function renderMasterWebPanel() {
         sendApiRequest("bulk_dm", { targets: targets, messageText: dmText, dmMode: mode });
       });
 
-      // 12. Channel Join / Leave & Account Add
+      // 14. Channel Join / Leave & Account Add
       document.getElementById("btn-join-channel").addEventListener("click", function () {
         var chan = document.getElementById("inp-join-channel").value.trim();
+        var cnt = document.getElementById("inp-join-count").value.trim();
         if (!chan) return toast("⚠️ Enter a Channel Link or @username!", "#f43f5e");
-        sendApiRequest("join", { input: chan });
+        sendApiRequest("join", { input: chan, limitCount: cnt });
       });
 
       document.getElementById("btn-leave-number").addEventListener("click", function () {
@@ -2705,8 +3357,9 @@ function renderMasterWebPanel() {
 
       document.getElementById("btn-verify-otp").addEventListener("click", function () {
         var otp = document.getElementById("inp-otp").value.trim();
+        var twoFa = document.getElementById("inp-2fa").value.trim();
         if (!otp) return toast("⚠️ Enter the 5-digit OTP!", "#f43f5e");
-        sendApiRequest("verify_code", { input: otp });
+        sendApiRequest("verify_code", { input: otp, twoFaPassword: twoFa });
       });
 
       document.getElementById("btn-verify-2fa").addEventListener("click", function () {
@@ -2729,7 +3382,7 @@ function renderMasterWebPanel() {
 }
 
 // ============================================================================
-// 4. MAIN SERVERLESS API HANDLER (ALL 11+ AUTOMATION ENGINES + ZERO HANG)
+// 4. MAIN SERVERLESS API HANDLER (ALL AUTOMATION ENGINES + ZERO HANG)
 // ============================================================================
 module.exports = async (req, res) => {
   if (req.method === "GET") {
@@ -2738,7 +3391,7 @@ module.exports = async (req, res) => {
   }
 
   const body = req.body || {};
-  const { action, input, apiId, apiHash, webPin, selectedPhones } = body;
+  const { action, input, apiId, apiHash, webPin, selectedPhones, limitCount } = body;
 
   if (webPin !== undefined && String(webPin) !== MASTER_PIN) {
     return res.status(403).json({
@@ -2798,7 +3451,7 @@ module.exports = async (req, res) => {
 
     const defaultApiConfig = (await fbGet("panel/api_config")) || {};
 
-    // ================= 2. SEND OTP (PER-ACCOUNT API_ID & API_HASH + ANTI-LOGOUT PARAMS) =================
+    // ================= 2. SEND OTP (SHOWS EXACT DELIVERY TYPE + ANTI-LOGOUT PARAMS) =================
     if (action === "send_code") {
       const phone = "+" + String(input || "").replace(/\D/g, "");
       const accApiId = parseInt(String(apiId || defaultApiConfig.apiId || "").replace(/\D/g, ""), 10);
@@ -2837,6 +3490,12 @@ module.exports = async (req, res) => {
         })
       );
 
+      let deliveryType = "📲 Telegram App (777000 Service Chat)";
+      if (result.type && result.type.className) {
+        if (result.type.className.indexOf("Sms") !== -1) deliveryType = "📩 SIM Card SMS";
+        else if (result.type.className.indexOf("Call") !== -1) deliveryType = "📞 Phone Call";
+      }
+
       const tempSession = client.session.save();
       await safeDisconnect(client);
 
@@ -2855,23 +3514,32 @@ module.exports = async (req, res) => {
         pendingApiId: accApiId,
         reply:
           "📩 <b>OTP SENT TO:</b> <code>" + phone + "</code>\n" +
+          "📡 <b>Delivery Method:</b> <code>" + deliveryType + "</code>\n" +
           "🔢 <b>API_ID:</b> <code>" + accApiId + "</code> | 🔑 <b>API_HASH:</b> <code>" + accApiHash + "</code>\n" +
           "👉 Enter the 5-digit OTP in Step 2!"
       });
     }
 
-    // ================= 3. VERIFY OTP & SAVE ACCOUNT =================
+    // ================= 3. VERIFY OTP (+ AUTO 2FA IN 1 STEP TO PREVENT 401 ERROR) =================
     if (action === "verify_code") {
       const code = String(input || "").replace(/\D/g, "");
+      const optional2FA = String(body.twoFaPassword || "").trim();
       const tempAuth = await fbGet("panel/auth_temp");
 
       if (!tempAuth || !tempAuth.tempSession) {
-        return res.status(200).json({ nextStep: "", reply: "❌ <b>No Active OTP Session!</b>" });
+        return res.status(200).json({ nextStep: "", reply: "❌ <b>No Active OTP Session!</b> First click Step 1 (Send OTP)." });
       }
 
       const phone = tempAuth.phone;
       const accApiId = Number(tempAuth.apiId || defaultApiConfig.apiId);
       const accApiHash = String(tempAuth.apiHash || defaultApiConfig.apiHash);
+
+      let accounts = (await fbGet("panel/accounts")) || [];
+      if (!Array.isArray(accounts)) accounts = Object.values(accounts);
+      const existingAcc = accounts.find(function (a) {
+        return a && a.phone === phone;
+      });
+      const auto2FAPassword = optional2FA || (existingAcc && existingAcc.twoFaPassword) || "";
 
       const client = new TelegramClient(
         new StringSession(tempAuth.tempSession),
@@ -2899,34 +3567,57 @@ module.exports = async (req, res) => {
         );
       } catch (err) {
         if (err.message && err.message.indexOf("SESSION_PASSWORD_NEEDED") !== -1) {
-          const updatedSession = client.session.save();
-          await safeDisconnect(client);
-          await fbSet("panel/auth_temp", {
-            phone: phone,
-            apiId: accApiId,
-            apiHash: accApiHash,
-            phoneCodeHash: tempAuth.phoneCodeHash,
-            tempSession: updatedSession,
-            time: Date.now()
-          });
+          if (auto2FAPassword) {
+            try {
+              await verifyTelegram2FAPassword(client, accApiId, accApiHash, auto2FAPassword);
+            } catch (twoFaErr) {
+              const updatedSession = client.session.save();
+              await safeDisconnect(client);
+              await fbSet("panel/auth_temp", {
+                phone: phone,
+                apiId: accApiId,
+                apiHash: accApiHash,
+                phoneCodeHash: tempAuth.phoneCodeHash,
+                tempSession: updatedSession,
+                otpVerified: true,
+                time: Date.now()
+              });
+              return res.status(200).json({
+                nextStep: "wait_2fa",
+                pendingPhone: phone,
+                pendingApiId: accApiId,
+                reply: "🔐 <b>OTP Verified! Please enter your current 2FA Cloud Password in Step 3.</b>"
+              });
+            }
+          } else {
+            const updatedSession = client.session.save();
+            await safeDisconnect(client);
+            await fbSet("panel/auth_temp", {
+              phone: phone,
+              apiId: accApiId,
+              apiHash: accApiHash,
+              phoneCodeHash: tempAuth.phoneCodeHash,
+              tempSession: updatedSession,
+              otpVerified: true,
+              time: Date.now()
+            });
 
-          return res.status(200).json({
-            nextStep: "wait_2fa",
-            pendingPhone: phone,
-            pendingApiId: accApiId,
-            reply: "🔐 <b>2FA PASSWORD REQUIRED FOR:</b> <code>" + phone + "</code>\n👉 Enter your 2FA Cloud Password in Step 3!"
-          });
+            return res.status(200).json({
+              nextStep: "wait_2fa",
+              pendingPhone: phone,
+              pendingApiId: accApiId,
+              reply: "🔐 <b>OTP VERIFIED! 2FA PASSWORD REQUIRED FOR:</b> <code>" + phone + "</code>\n👉 Enter your 2FA Cloud Password in Step 3!"
+            });
+          }
+        } else {
+          await safeDisconnect(client);
+          throw err;
         }
-        await safeDisconnect(client);
-        throw err;
       }
 
       const finalSession = client.session.save();
       const me = await client.getMe();
       await safeDisconnect(client);
-
-      let accounts = (await fbGet("panel/accounts")) || [];
-      if (!Array.isArray(accounts)) accounts = Object.values(accounts);
 
       let exists = false;
       for (let i = 0; i < accounts.length; i++) {
@@ -2934,6 +3625,7 @@ module.exports = async (req, res) => {
           accounts[i].session = finalSession;
           accounts[i].apiId = accApiId;
           accounts[i].apiHash = accApiHash;
+          if (auto2FAPassword) accounts[i].twoFaPassword = auto2FAPassword;
           accounts[i].name = me.firstName || "User";
           accounts[i].username = me.username || "None";
           exists = true;
@@ -2946,6 +3638,7 @@ module.exports = async (req, res) => {
           phone: phone,
           apiId: accApiId,
           apiHash: accApiHash,
+          twoFaPassword: auto2FAPassword || "",
           name: me.firstName || "User",
           username: me.username || "None",
           session: finalSession,
@@ -2962,13 +3655,20 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= 4. VERIFY 2FA PASSWORD (SAVES 2FA FOR EASY REJOIN) =================
+    // ================= 4. VERIFY 2FA PASSWORD (SAFE GUARD AGAINST 401 ERROR) =================
     if (action === "verify_2fa") {
       const password = String(input || "").trim();
       const tempAuth = await fbGet("panel/auth_temp");
 
       if (!tempAuth || !tempAuth.tempSession) {
         return res.status(200).json({ nextStep: "", reply: "❌ <b>Session Expired!</b> Request OTP again." });
+      }
+
+      if (!tempAuth.otpVerified) {
+        return res.status(200).json({
+          nextStep: "wait_otp",
+          reply: "⚠️ <b>STOP! First verify the 5-Digit OTP in Step 2!</b> Only click Verify 2FA after Step 2 succeeds."
+        });
       }
 
       const phone = tempAuth.phone;
@@ -3035,7 +3735,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= LOAD ALL & TARGET ACCOUNTS =================
+    // ================= LOAD ALL & TARGET ACCOUNTS (WITH QUANTITY LIMITER) =================
     let allAccounts = (await fbGet("panel/accounts")) || [];
     if (!Array.isArray(allAccounts)) allAccounts = Object.values(allAccounts);
 
@@ -3064,7 +3764,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({ nextStep: "", reply: "⚠️ <b>No Active Accounts!</b> Connect at least 1 Telegram ID first." });
     }
 
-    const targetAccounts = filterTargetAccounts(allAccounts, selectedPhones);
+    const targetAccounts = filterTargetAccounts(allAccounts, selectedPhones, limitCount);
     if (targetAccounts.length === 0) {
       return res.status(200).json({ nextStep: "", reply: "⚠️ <b>No Accounts Selected!</b> Select at least 1 account in the Target Selector Bar." });
     }
@@ -3162,7 +3862,7 @@ module.exports = async (req, res) => {
       }
     }
 
-    // ================= 5. AUTO POST VIEWS BOOSTER (ALL SELECTED IDs) =================
+    // ================= 5. AUTO POST VIEWS BOOSTER (SUPPORTS EXACT QUANTITY LIMIT) =================
     if (action === "boost_views") {
       const parsed = parseTelegramPostLink(body.postLink);
       if (!parsed) {
@@ -3176,6 +3876,9 @@ module.exports = async (req, res) => {
             (async function () {
               const client = await connectAccountClient(acc);
               try {
+                try {
+                  await client.invoke(new Api.channels.JoinChannel({ channel: parsed.peer }));
+                } catch (e) {}
                 const peerEntity = await client.getInputEntity(parsed.peer);
                 await client.invoke(
                   new Api.messages.GetMessagesViews({
@@ -3200,20 +3903,21 @@ module.exports = async (req, res) => {
           "   👀 <b>POST VIEWS BOOSTED!</b>\n" +
           "╚════════════════════════════╝\n" +
           "🔗 <b>Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
-          "👁️ <b>Views Added:</b> <code>+" + boosted + " / " + targetAccounts.length + " IDs</code>"
+          "👁️ <b>Views Delivered:</b> <code>+" + boosted + " / " + targetAccounts.length + " Requested IDs</code>"
       });
     }
 
-    // ================= 6. AUTO POST EMOJI REACTIONS (ALL SELECTED IDs) =================
+    // ================= 6. ALL 73+ EMOJI REACTIONS (SINGLE / MULTI-MIX / RANDOM + EXACT QUANTITY) =================
     if (action === "send_reaction") {
       const parsed = parseTelegramPostLink(body.postLink);
       if (!parsed) {
         return res.status(200).json({ reply: "❌ <b>Invalid Post Link!</b> Example: <code>https://t.me/channelname/123</code>" });
       }
 
-      const emojiPool = ["🔥", "❤️", "🎉", "👍", "⚡", "💯", "🤩", "👏"];
       const reqEmoji = body.emoji || "🔥";
+      const customEmojiList = Array.isArray(body.emojiList) && body.emojiList.length > 0 ? body.emojiList : null;
       let reacted = 0;
+      let usedEmojisLog = [];
 
       await Promise.allSettled(
         targetAccounts.map(function (acc, idx) {
@@ -3221,21 +3925,50 @@ module.exports = async (req, res) => {
             (async function () {
               const client = await connectAccountClient(acc);
               try {
+                try {
+                  await client.invoke(new Api.channels.JoinChannel({ channel: parsed.peer }));
+                } catch (e) {}
+
                 const peerEntity = await client.getInputEntity(parsed.peer);
-                const useEmoji = reqEmoji === "RANDOM" ? emojiPool[idx % emojiPool.length] : reqEmoji;
-                await client.invoke(
-                  new Api.messages.SendReaction({
-                    peer: peerEntity,
-                    msgId: Number(parsed.msgId),
-                    reaction: [new Api.ReactionEmoji({ emoticon: useEmoji })]
-                  })
-                );
+                let useEmoji = "🔥";
+
+                if (reqEmoji === "RANDOM") {
+                  const randomIndex = Math.floor(Math.random() * ALL_TELEGRAM_REACTIONS.length);
+                  useEmoji = ALL_TELEGRAM_REACTIONS[randomIndex];
+                } else if (customEmojiList && customEmojiList.length > 0) {
+                  useEmoji = customEmojiList[idx % customEmojiList.length];
+                } else {
+                  useEmoji = reqEmoji;
+                }
+
+                try {
+                  await client.invoke(
+                    new Api.messages.SendReaction({
+                      peer: peerEntity,
+                      msgId: Number(parsed.msgId),
+                      reaction: [new Api.ReactionEmoji({ emoticon: useEmoji })]
+                    })
+                  );
+                } catch (reactErr) {
+                  // If channel restricts rare emojis, fallback to classic ❤️ or 👍 or 🔥
+                  const safeFallbacks = ["🔥", "❤️", "👍", "🎉", "👏"];
+                  useEmoji = safeFallbacks[idx % safeFallbacks.length];
+                  await client.invoke(
+                    new Api.messages.SendReaction({
+                      peer: peerEntity,
+                      msgId: Number(parsed.msgId),
+                      reaction: [new Api.ReactionEmoji({ emoticon: useEmoji })]
+                    })
+                  );
+                }
+
+                usedEmojisLog.push(useEmoji);
                 reacted++;
               } finally {
                 await safeDisconnect(client);
               }
             })(),
-            8000
+            8500
           );
         })
       );
@@ -3246,8 +3979,304 @@ module.exports = async (req, res) => {
           "   ❤️ <b>EMOJI REACTIONS SENT!</b>\n" +
           "╚════════════════════════════╝\n" +
           "🔗 <b>Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
-          "✨ <b>Reaction:</b> " + reqEmoji + "\n" +
-          "🟢 <b>Reacted Accounts:</b> <code>" + reacted + " / " + targetAccounts.length + " IDs</code>"
+          "✨ <b>Reactions Used:</b> " + (usedEmojisLog.join(" ") || reqEmoji) + "\n" +
+          "🟢 <b>Reacted Accounts:</b> <code>" + reacted + " / " + targetAccounts.length + " Requested IDs</code>"
+      });
+    }
+
+    // ================= 6B. CHANNEL POST INLINE BUTTON SCANNER & CLICKER =================
+    if (action === "inspect_post_buttons") {
+      const parsed = parseTelegramPostLink(body.postLink);
+      if (!parsed) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Channel Post Link!</b> Example: <code>https://t.me/channelname/123</code>" });
+      }
+
+      const scannerAcc = targetAccounts[0];
+      const client = await connectAccountClient(scannerAcc);
+      try {
+        try {
+          await client.invoke(new Api.channels.JoinChannel({ channel: parsed.peer }));
+        } catch (e) {}
+        const peerEntity = await client.getInputEntity(parsed.peer);
+        const msgs = await client.getMessages(peerEntity, { ids: [Number(parsed.msgId)] });
+        if (!msgs || !msgs[0]) {
+          return res.status(200).json({ reply: "❌ <b>Post not found!</b> Make sure the channel/post link is valid." });
+        }
+        const btns = extractInlineButtonsFromMessage(msgs[0]);
+        if (btns.length === 0) {
+          return res.status(200).json({ reply: "📭 <b>No Inline Buttons found on this post!</b>" });
+        }
+
+        let report = "🔍 <b>INLINE BUTTONS FOUND ON POST (" + btns.length + " Buttons):</b>\n\n";
+        for (let i = 0; i < btns.length; i++) {
+          const b = btns[i];
+          const isLastTag = i === btns.length - 1 ? " 👈 <b>[LAST BUTTON]</b>" : "";
+          report +=
+            "<b>[" + b.index + "] " + b.text + "</b> (" + b.type + ")" + isLastTag + "\n" +
+            (b.url ? " ┗ 🔗 <code>" + b.url + "</code>\n" : "");
+        }
+        return res.status(200).json({ reply: report });
+      } finally {
+        await safeDisconnect(client);
+      }
+    }
+
+    if (action === "click_post_button") {
+      const parsed = parseTelegramPostLink(body.postLink);
+      if (!parsed) {
+        return res.status(200).json({ reply: "❌ <b>Invalid Channel Post Link!</b> Example: <code>https://t.me/channelname/123</code>" });
+      }
+
+      const btnTarget = String(body.buttonTarget || "LAST").trim().toUpperCase();
+      let clickedCount = 0;
+      let clickedBtnLabel = "";
+      let actionDetails = [];
+
+      await Promise.allSettled(
+        targetAccounts.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                try {
+                  await client.invoke(new Api.channels.JoinChannel({ channel: parsed.peer }));
+                } catch (e) {}
+
+                const peerEntity = await client.getInputEntity(parsed.peer);
+                const msgs = await client.getMessages(peerEntity, { ids: [Number(parsed.msgId)] });
+                if (!msgs || !msgs[0]) throw new Error("Post not found");
+
+                const btns = extractInlineButtonsFromMessage(msgs[0]);
+                if (btns.length === 0) throw new Error("No inline buttons on post");
+
+                let chosenBtn = btns[btns.length - 1]; // Default: LAST button
+                if (btnTarget === "FIRST") {
+                  chosenBtn = btns[0];
+                } else if (btnTarget === "ALL_MINIAPPS") {
+                  const foundMa = btns.find(function (b) {
+                    return b.type === "MINI_APP_WEBVIEW" || b.type === "MINI_APP_LINK" || b.url;
+                  });
+                  chosenBtn = foundMa || btns[btns.length - 1];
+                } else if (!isNaN(parseInt(btnTarget, 10))) {
+                  const idx = Math.max(0, Math.min(btns.length - 1, parseInt(btnTarget, 10) - 1));
+                  chosenBtn = btns[idx];
+                }
+
+                clickedBtnLabel = chosenBtn.text;
+                const resInfo = await executeInlineButtonOrMiniApp(client, peerEntity, parsed.msgId, chosenBtn, null, "");
+                actionDetails.push("🟢 <b>" + (acc.name || acc.phone) + ":</b> " + resInfo);
+                clickedCount++;
+              } finally {
+                await safeDisconnect(client);
+              }
+            })(),
+            9000
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   🔘 <b>POST INLINE BUTTON CLICKED!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🔗 <b>Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
+          "👆 <b>Button Pressed:</b> <code>" + (clickedBtnLabel || btnTarget) + "</code>\n" +
+          "🟢 <b>Clicked By:</b> <code>" + clickedCount + " / " + targetAccounts.length + " Requested IDs</code>\n\n" +
+          actionDetails.slice(0, 8).join("\n")
+      });
+    }
+
+    // ================= 6C. BOT MINI-APP OPENER & LAST INLINE BUTTON AUTO-CLICKER =================
+    if (action === "bot_miniapp_opener") {
+      const rawBotInput = String(body.botInput || "").trim();
+      const buttonMode = String(body.buttonMode || "LAST").toUpperCase();
+      const targetPhone = body.targetPhone;
+
+      // Determine which accounts to use (Specific ID or Selected IDs) + apply limitCount
+      let basePool =
+        targetPhone && targetPhone !== "SELECTED"
+          ? allAccounts.filter(function (a) {
+              return a.phone === targetPhone;
+            })
+          : filterTargetAccounts(allAccounts, selectedPhones, limitCount);
+
+      const numLimit = parseInt(String(limitCount || "").trim(), 10);
+      if (!isNaN(numLimit) && numLimit > 0 && numLimit < basePool.length) {
+        basePool = basePool.slice(0, numLimit);
+      }
+
+      if (basePool.length === 0) {
+        return res.status(200).json({ reply: "⚠️ <b>No Accounts Selected for Mini-App Opener!</b>" });
+      }
+
+      // Check if user pasted a Channel Post link directly in the Mini-App box
+      const asPostLink = parseTelegramPostLink(rawBotInput);
+      const parsedBot = parseBotAndMiniAppInput(rawBotInput, body.startParam);
+
+      let openedCount = 0;
+      let logs = [];
+
+      await Promise.allSettled(
+        basePool.map(function (acc) {
+          return withTimeout(
+            (async function () {
+              const client = await connectAccountClient(acc);
+              try {
+                // CASE 1: User pasted a Channel/Group Post Link -> Click its Last Button & Open Mini-App
+                if (asPostLink) {
+                  try {
+                    await client.invoke(new Api.channels.JoinChannel({ channel: asPostLink.peer }));
+                  } catch (e) {}
+                  const peerEntity = await client.getInputEntity(asPostLink.peer);
+                  const msgs = await client.getMessages(peerEntity, { ids: [Number(asPostLink.msgId)] });
+                  if (msgs && msgs[0]) {
+                    const btns = extractInlineButtonsFromMessage(msgs[0]);
+                    if (btns.length > 0) {
+                      const targetBtn = buttonMode === "FIRST" ? btns[0] : btns[btns.length - 1];
+                      const info = await executeInlineButtonOrMiniApp(client, peerEntity, asPostLink.msgId, targetBtn, null, "");
+                      logs.push("🟢 <b>" + (acc.name || acc.phone) + ":</b> " + info);
+                      openedCount++;
+                      return;
+                    }
+                  }
+                }
+
+                // CASE 2: User pasted a Bot Link / Mini-App Link / @BotUsername
+                if (!parsedBot.botUser) throw new Error("Invalid Bot/Mini-App Link");
+                const botEntity = await client.getInputEntity(parsedBot.botUser);
+                let stepNotes = [];
+
+                // Step A: If it is a direct Mini-App link (t.me/Bot/app?startapp=...) or MINIAPP_ONLY mode, open Mini-App immediately
+                if (parsedBot.appShortName && Api.messages.RequestAppWebView && Api.InputBotAppShortName) {
+                  try {
+                    await client.invoke(
+                      new Api.messages.RequestAppWebView({
+                        peer: botEntity,
+                        app: new Api.InputBotAppShortName({
+                          botId: botEntity,
+                          shortName: parsedBot.appShortName
+                        }),
+                        startParam: parsedBot.startParam || undefined,
+                        platform: "android",
+                        writeAllowed: true
+                      })
+                    );
+                    stepNotes.push("🎮 Mini-App Opened (@" + parsedBot.botUser + "/" + parsedBot.appShortName + ")");
+                  } catch (e) {}
+                }
+
+                // Step B: Send /start (or StartBot with referral payload) so the bot sends its inline buttons / Mini-App menu
+                try {
+                  if (parsedBot.startParam) {
+                    await client.invoke(
+                      new Api.messages.StartBot({
+                        bot: botEntity,
+                        peer: botEntity,
+                        startParam: String(parsedBot.startParam),
+                        randomId: BigInt(Math.floor(Math.random() * 1000000000000))
+                      })
+                    );
+                  } else {
+                    await client.sendMessage(botEntity, { message: "/start" });
+                  }
+                } catch (startErr) {}
+
+                // Wait 1.2s for bot reply with inline buttons
+                await new Promise(function (r) {
+                  setTimeout(r, 1200);
+                });
+
+                // Step C: Fetch latest bot messages and inspect inline buttons
+                const botMsgs = await client.getMessages(botEntity, { limit: 4 });
+                let clickedButtonInfo = "";
+
+                if (botMsgs && botMsgs.length > 0) {
+                  for (let m = 0; m < botMsgs.length; m++) {
+                    const btns = extractInlineButtonsFromMessage(botMsgs[m]);
+                    if (btns.length > 0) {
+                      if (buttonMode === "ALL_BUTTONS") {
+                        for (let bIdx = 0; bIdx < btns.length; bIdx++) {
+                          try {
+                            const inf = await executeInlineButtonOrMiniApp(client, botEntity, botMsgs[m].id, btns[bIdx], botEntity, parsedBot.startParam);
+                            clickedButtonInfo = inf;
+                          } catch (e) {}
+                        }
+                      } else {
+                        // Pick LAST button (or FIRST if selected)
+                        const chosenBtn = buttonMode === "FIRST" ? btns[0] : btns[btns.length - 1];
+                        clickedButtonInfo = await executeInlineButtonOrMiniApp(
+                          client,
+                          botEntity,
+                          botMsgs[m].id,
+                          chosenBtn,
+                          botEntity,
+                          parsedBot.startParam
+                        );
+                      }
+                      break;
+                    }
+                  }
+                }
+
+                if (clickedButtonInfo) {
+                  stepNotes.push(clickedButtonInfo);
+                }
+
+                // Step D: Also trigger Main WebView / Bot Menu WebView if not already opened
+                if (stepNotes.length === 0 || buttonMode === "MINIAPP_ONLY") {
+                  try {
+                    if (Api.messages.RequestMainWebView) {
+                      await client.invoke(
+                        new Api.messages.RequestMainWebView({
+                          peer: botEntity,
+                          bot: botEntity,
+                          startParam: parsedBot.startParam || undefined,
+                          platform: "android"
+                        })
+                      );
+                      stepNotes.push("🎮 Main Mini-App Opened");
+                    } else {
+                      await client.invoke(
+                        new Api.messages.RequestWebView({
+                          peer: botEntity,
+                          bot: botEntity,
+                          fromBotMenu: true,
+                          startParam: parsedBot.startParam || undefined,
+                          platform: "android"
+                        })
+                      );
+                      stepNotes.push("🎮 Bot Menu Mini-App Opened");
+                    }
+                  } catch (e) {
+                    if (stepNotes.length === 0) {
+                      stepNotes.push("🤖 Bot Started (/start)");
+                    }
+                  }
+                }
+
+                logs.push("🟢 <b>" + (acc.name || acc.phone) + ":</b> " + stepNotes.join(" + "));
+                openedCount++;
+              } catch (err) {
+                logs.push("🔴 <b>" + (acc.name || acc.phone) + ":</b> " + (err.message || "Failed"));
+              } finally {
+                await safeDisconnect(client);
+              }
+            })(),
+            9500
+          );
+        })
+      );
+
+      return res.status(200).json({
+        reply:
+          "╔════════════════════════════╗\n" +
+          "   🎮 <b>MINI-APP &amp; LAST BUTTON EXECUTED!</b>\n" +
+          "╚════════════════════════════╝\n" +
+          "🤖 <b>Target:</b> <code>" + rawBotInput + "</code>\n" +
+          "🎯 <b>Button Mode:</b> <code>" + buttonMode + "</code>\n" +
+          "🟢 <b>Completed By:</b> <code>" + openedCount + " / " + basePool.length + " Requested IDs</code>\n\n" +
+          logs.slice(0, 10).join("\n")
       });
     }
 
@@ -3317,7 +4346,7 @@ module.exports = async (req, res) => {
           "   💬 <b>AUTO COMMENTS POSTED!</b>\n" +
           "╚════════════════════════════╝\n" +
           "🔗 <b>Target Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
-          "🟢 <b>Comments Delivered:</b> <code>" + commented + " / " + targetAccounts.length + " IDs</code>"
+          "🟢 <b>Comments Delivered:</b> <code>" + commented + " / " + targetAccounts.length + " Requested IDs</code>"
       });
     }
 
@@ -3376,7 +4405,7 @@ module.exports = async (req, res) => {
           "╚════════════════════════════╝\n" +
           "🔗 <b>Poll Post:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
           "🎯 <b>Voted Option:</b> <code>Option #" + (optIndex + 1) + "</code>\n" +
-          "🟢 <b>Total Votes Cast:</b> <code>" + voted + " / " + targetAccounts.length + " IDs</code>"
+          "🟢 <b>Total Votes Cast:</b> <code>" + voted + " / " + targetAccounts.length + " Requested IDs</code>"
       });
     }
 
@@ -3387,7 +4416,7 @@ module.exports = async (req, res) => {
         return res.status(200).json({ reply: "❌ <b>Invalid Post Link!</b>" });
       }
 
-      const emojiPool = ["🔥", "❤️", "🎉", "👍", "⚡", "💯"];
+      const customList = Array.isArray(body.emojiList) && body.emojiList.length > 0 ? body.emojiList : ALL_TELEGRAM_REACTIONS;
       let completed = 0;
 
       await Promise.allSettled(
@@ -3408,13 +4437,16 @@ module.exports = async (req, res) => {
                     increment: true
                   })
                 );
-                await client.invoke(
-                  new Api.messages.SendReaction({
-                    peer: peerEntity,
-                    msgId: Number(parsed.msgId),
-                    reaction: [new Api.ReactionEmoji({ emoticon: emojiPool[idx % emojiPool.length] })]
-                  })
-                );
+                const useEm = customList[idx % customList.length] || "🔥";
+                try {
+                  await client.invoke(
+                    new Api.messages.SendReaction({
+                      peer: peerEntity,
+                      msgId: Number(parsed.msgId),
+                      reaction: [new Api.ReactionEmoji({ emoticon: useEm })]
+                    })
+                  );
+                } catch (e) {}
                 completed++;
               } finally {
                 await safeDisconnect(client);
@@ -3432,13 +4464,13 @@ module.exports = async (req, res) => {
           "╚════════════════════════════╝\n" +
           "📢 <b>Target:</b> <code>" + parsed.peer + "/" + parsed.msgId + "</code>\n" +
           "✅ <b>Actions:</b> <code>Auto-Join + View + Reaction</code>\n" +
-          "🟢 <b>Completed By:</b> <code>" + completed + " / " + targetAccounts.length + " IDs</code>"
+          "🟢 <b>Completed By:</b> <code>" + completed + " / " + targetAccounts.length + " Requested IDs</code>"
       });
     }
 
     // ================= 10. AUTO BOT REFERRAL BOOSTER (/start) =================
     if (action === "bot_referral") {
-      const parsedBot = parseBotReferralInput(body.botInput, body.startParam);
+      const parsedBot = parseBotAndMiniAppInput(body.botInput, body.startParam);
       if (!parsedBot.botUser) {
         return res.status(200).json({ reply: "❌ <b>Invalid Bot Link or @username!</b>" });
       }
@@ -3480,7 +4512,7 @@ module.exports = async (req, res) => {
           "╚════════════════════════════╝\n" +
           "🤖 <b>Target Bot:</b> <code>@" + parsedBot.botUser + "</code>\n" +
           "🔗 <b>Referral Payload:</b> <code>" + (parsedBot.startParam || "Standard /start") + "</code>\n" +
-          "🟢 <b>Triggered From:</b> <code>" + startedCount + " / " + targetAccounts.length + " Selected IDs</code>"
+          "🟢 <b>Triggered From:</b> <code>" + startedCount + " / " + targetAccounts.length + " Requested IDs</code>"
       });
     }
 
@@ -3562,7 +4594,6 @@ module.exports = async (req, res) => {
 
                 let msgs = [];
 
-                // FALLBACK 1: Load recent dialogs first (populates 777000 entity in fresh StringSession!)
                 try {
                   const dialogs = await client.getDialogs({ limit: 20 });
                   for (let d = 0; d < dialogs.length; d++) {
@@ -3577,14 +4608,12 @@ module.exports = async (req, res) => {
                   }
                 } catch (e1) {}
 
-                // FALLBACK 2: Direct getMessages(777000)
                 if (!msgs || msgs.length === 0) {
                   try {
                     msgs = await client.getMessages(777000, { limit: 5 });
                   } catch (e2) {}
                 }
 
-                // FALLBACK 3: Raw InputPeerUser(777000) GetHistory
                 if (!msgs || msgs.length === 0) {
                   try {
                     const historyRes = await client.invoke(
@@ -3828,7 +4857,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ================= 16. AUTO JOIN CHANNEL (SELECTED IDs) =================
+    // ================= 16. AUTO JOIN CHANNEL (SELECTED IDs + QUANTITY LIMIT) =================
     if (action === "join") {
       const channelInput = String(input || "").trim();
       let title = channelInput;
@@ -3906,7 +4935,7 @@ module.exports = async (req, res) => {
           "╚════════════════════════════╝\n\n" +
           "📢 <b>Channel Name:</b> " + title + "\n" +
           "🔗 <b>Channel Link:</b> <code>" + channelInput + "</code>\n" +
-          "🟢 <b>Joined Accounts:</b> <code>" + successCount + " / " + targetAccounts.length + " IDs</code>\n" +
+          "🟢 <b>Joined Accounts:</b> <code>" + successCount + " / " + targetAccounts.length + " Requested IDs</code>\n" +
           "🔴 <b>Failed Accounts:</b> <code>" + failCount + " IDs</code>"
       });
     }
