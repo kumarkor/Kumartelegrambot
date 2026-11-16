@@ -1,25 +1,24 @@
 // ============================================================================
-// 👑 FILE: api/bot.js — KURMURYA 24/7 CLOUD WEBHOOK ENGINE (FULL UPDATED SUITE) 👑
-// Endpoint: https://kumartelegrambot.vercel.app/api/bot
-// Includes:
-// - Exact 8-Button Photo Menu (Order View, Order Status, My Account, Daily Bonus,
-//   Refer & Earn, Redeem Code, Top Up, Help / Support) + Admin Panel
-// - All 4 Services in Order View:
-//   1. ❤️ Channel Reaction (All 73+ Official Emojis + Random + Top 8 Mix)
-//   2. 👀 Post Views
-//   3. 📊 Vote Poll
-//   4. 🔘 Line Vote (Channel Post Inline Button Clicker: Last/First/1,2,3/Mini-App)
-// - Custom Quantity Selector (1, 2, 3, 4, 5, 6... or ANY typed number / ALL)
-// - Mandatory ₹1 Channel Unlock Lock (Unlimited free orders after ₹1 unlock)
-// - Live Force-Join Checker (Public & Private Channels via getChatMember)
-// - Top-Up QR Code + UPI ID + Smart 12-Digit UTR Fail-Safe + Admin Approve/Reject
+// 👑 FILE: api/bot.js (OR api/bot1.js) — KURMURYA 24/7 CLOUD WEBHOOK ENGINE 👑
+// Endpoint: https://kumartelegrambot.vercel.app/api/bot (or /api/bot1)
+// Included Modules (0% Forgotten + VIP Auto Channel Reaction & Views Added):
+// - Works with BOTH api/bot.js and api/bot1.js automatically!
+// - Exact 8-Button Photo Menu + Admin Panel
+// - Normal Users see ONLY Manual Services (₹1 Channel Unlock = Unlimited Manual)
+// - VIP Users ONLY see: ⚡ VIP Auto Reaction & Views (₹100 Default, Admin Configurable)
+// - Automatic Channel Post Detector (channel_post): When Bot is Admin in the
+//   VIP user's channel, ANY new post uploaded automatically gets Views + Reactions!
+// - All 73+ Official Telegram Emoji Reactions + Random + Top 8 Mix
+// - Custom Quantity Selector (1, 2, 3, 4, 5, 6... or ALL)
+// - Live Force-Join Check (Public & Private Channels)
+// - Top-Up QR Code + UPI ID + Smart 12-Digit UTR Detector + Admin Approve/Reject
 // - 2-Way Help / Support Desk with Admin Direct Reply Button
 // ============================================================================
 
 const PRIMARY_FIREBASE_URL = "https://kumarkorapp-default-rtdb.asia-southeast1.firebasedatabase.app";
 const MIRROR_FIREBASE_URL = "https://kurmuryatelegrambot-default-rtdb.firebaseio.com";
 const SMM_PANEL_API_URL = "https://kumartelegrambot.vercel.app/api/panel";
-const WEBHOOK_BASE_URL = "https://kumartelegrambot.vercel.app/api/bot";
+const DEFAULT_WEBHOOK_BASE = "https://kumartelegrambot.vercel.app/api/bot";
 const MASTER_ADMIN = "7335163273";
 const MASTER_PIN = "252010";
 
@@ -77,9 +76,13 @@ function isBotAdmin(b, uid) {
   return false;
 }
 
-/**
- * Parses Quantity typed or clicked by user (1, 2, 3, 4, 5, 6... or ALL)
- */
+function isVipUser(b, p, uid) {
+  if (isBotAdmin(b, uid)) return true;
+  if (p && p.isVip === true) return true;
+  if (Array.isArray(b.vipUsers) && b.vipUsers.map(String).includes(String(uid))) return true;
+  return false;
+}
+
 function parseQuantityInput(rawQty) {
   const q = String(rawQty || "").trim().toUpperCase();
   if (q === "ALL" || q === "ALL IDS" || q === "") return "";
@@ -88,9 +91,6 @@ function parseQuantityInput(rawQty) {
   return String(n);
 }
 
-/**
- * Parses Line Vote inline button target (LAST, FIRST, ALL_MINIAPPS, or 1, 2, 3...)
- */
 function parseLineVoteModeInput(rawBtnInput) {
   const b = String(rawBtnInput || "").trim().toUpperCase();
   if (b.includes("LAST")) return "LAST";
@@ -101,9 +101,6 @@ function parseLineVoteModeInput(rawBtnInput) {
   return "LAST";
 }
 
-/**
- * Parses 73+ Emoji Selection (Single Emoji, Multiple Space-Separated Emojis, RANDOM, or TOP 8 MIX)
- */
 function parseEmojiSelectionInput(rawInput) {
   const str = String(rawInput || "").trim();
   if (str === "🎲 RANDOM" || str.toUpperCase() === "RANDOM") {
@@ -119,6 +116,13 @@ function parseEmojiSelectionInput(rawInput) {
   }
   const single = str || "🔥";
   return { emoji: single, emojiList: [single], label: single };
+}
+
+function sanitizeFirebaseKey(rawKey) {
+  return String(rawKey || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.#$\[\]\/]/g, "_");
 }
 
 // ============================================================================
@@ -142,10 +146,6 @@ async function fbRequest(baseUrl, path, method = "GET", data = null) {
   }
 }
 
-/**
- * Automatically finds the Bot Node across Primary (`kumarkorapp`) and Mirror (`kurmuryatelegrambot`)
- * Firebase Databases so 24/7 Cloud Webhook works seamlessly with Channel.java!
- */
 async function loadBotNodeFromCloud(botId) {
   let node = await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${botId}`, "GET");
   if (node && (node.botConfig || node.token)) {
@@ -221,19 +221,6 @@ async function sendBotPhoto(token, chatId, photoUrlOrFileId, captionHtml, replyM
   return res;
 }
 
-async function editBotMsg(token, chatId, msgId, htmlText, replyMarkup = null) {
-  if (!token || !msgId) return await sendBotMsg(token, chatId, htmlText, replyMarkup);
-  const payload = {
-    chat_id: String(chatId),
-    message_id: Number(msgId),
-    text: htmlText,
-    parse_mode: "HTML",
-    disable_web_page_preview: true
-  };
-  if (replyMarkup) payload.reply_markup = replyMarkup;
-  return await tgPost(token, "editMessageText", payload);
-}
-
 async function answerCb(token, cbId, text, showAlert = false) {
   if (!token || !cbId) return;
   return await tgPost(token, "answerCallbackQuery", {
@@ -244,7 +231,7 @@ async function answerCb(token, cbId, text, showAlert = false) {
 }
 
 // ============================================================================
-// 4. KEYBOARD BUILDERS (PHOTO MENU + 4 SERVICES + 73+ EMOJIS + QUANTITY)
+// 4. KEYBOARD BUILDERS (NORMAL vs VIP USER DYNAMIC MENUS)
 // ============================================================================
 function buildMainPhotoKeyboard(isAdminUser) {
   const rows = [
@@ -259,18 +246,31 @@ function buildMainPhotoKeyboard(isAdminUser) {
   return { keyboard: rows, resize_keyboard: true };
 }
 
-function buildOrderSubKeyboard(channelUnlockPrice) {
-  // Includes all 4 requested services: Channel Reaction, Post Views, Vote Poll, Line Vote
+/**
+ * Normal Users DO NOT see the Auto Channel Reaction button!
+ * ONLY VIP Users (and Admin) see the ⚡ VIP Auto Reaction & Views (₹100) button!
+ */
+function buildOrderSubKeyboard(channelUnlockPrice, autoChannelPrice, isVip) {
+  const rows = [
+    [{ text: "❤️ Channel Reaction" }, { text: "👀 Post Views" }],
+    [{ text: "📊 Vote Poll" }, { text: "🔘 Line Vote" }],
+    [
+      { text: `🔓 Set / Unlock Channel (₹${fmtRs(channelUnlockPrice)})` },
+      { text: "📋 My Unlocked Channels" }
+    ]
+  ];
+
+  // ONLY VIP USERS CAN SEE AUTO CHANNEL REACTION & VIEWS!
+  if (isVip) {
+    rows.push([
+      { text: `⚡ Auto Reaction & Views (₹${fmtRs(autoChannelPrice)})` },
+      { text: "🤖 My Auto Channels" }
+    ]);
+  }
+
+  rows.push([{ text: "🔙 Back to Main Menu" }]);
   return {
-    keyboard: [
-      [{ text: "❤️ Channel Reaction" }, { text: "👀 Post Views" }],
-      [{ text: "📊 Vote Poll" }, { text: "🔘 Line Vote" }],
-      [
-        { text: `🔓 Set / Unlock Channel (₹${fmtRs(channelUnlockPrice)})` },
-        { text: "📋 My Unlocked Channels" }
-      ],
-      [{ text: "🔙 Back to Main Menu" }]
-    ],
+    keyboard: rows,
     resize_keyboard: true
   };
 }
@@ -307,6 +307,8 @@ function buildLineVoteModeKeyboard() {
 function buildAdminKeyboard() {
   return {
     keyboard: [
+      [{ text: "👑 Add / Remove VIP" }, { text: "💲 Set Auto Channel ₹" }],
+      [{ text: "📋 Auto Channels List" }, { text: "👑 VIP Users List" }],
       [{ text: "📢 Add Public Channel" }, { text: "🔒 Add Private Channel" }],
       [{ text: "🗑️ Remove Force Channel" }, { text: "📋 Force Channel List" }],
       [{ text: "💲 Set Channel ₹ Price" }, { text: "👥 Set Refer Amount" }],
@@ -327,7 +329,7 @@ function buildCancelKeyboard() {
 }
 
 // ============================================================================
-// 5. CHANNEL KEY EXTRACTOR & ₹1 UNLOCK HELPERS
+// 5. CHANNEL KEY EXTRACTOR & ₹1 MANUAL UNLOCK HELPERS
 // ============================================================================
 function extractChannelKey(input) {
   if (!input) return "";
@@ -346,6 +348,9 @@ function extractChannelKey(input) {
         return "@" + ch.toLowerCase();
       }
     }
+  }
+  if (clean.startsWith("-100") && clean.length > 6) {
+    return clean.split(/\s+/)[0];
   }
   if (clean.startsWith("@") && clean.length > 2) {
     return clean.split(/\s+/)[0].toLowerCase();
@@ -369,7 +374,7 @@ async function sendChannelLockedPrompt(token, uid, chKey, unlockPrice, bal) {
     `📢 <b>Target Channel:</b> <code>${escHtml(chKey)}</code>\n` +
     `🏷️ <b>One-Time Unlock Fee:</b> <code>₹${fmtRs(unlockPrice)}</code>\n` +
     `💰 <b>Your Balance:</b> <code>₹${fmtRs(bal)}</code>\n\n` +
-    `⚠️ <i>Reactions, Post Views, Poll Votes & Line Votes will NOT go to ${escHtml(chKey)} until you unlock it for ₹${fmtRs(unlockPrice)}. Once unlocked, you can send UNLIMITED free orders to this channel!</i>\n\n` +
+    `⚠️ <i>Manual Reactions, Views, Poll Votes & Line Votes will NOT go to ${escHtml(chKey)} until you unlock it for ₹${fmtRs(unlockPrice)}. Once unlocked, you can send UNLIMITED free manual orders to this channel!</i>\n\n` +
     `👇 <b>Tap below to unlock this channel now:</b>`;
 
   await sendBotMsg(token, uid, msg, {
@@ -384,16 +389,17 @@ async function sendChannelLockedPrompt(token, uid, chKey, unlockPrice, bal) {
   });
 }
 
-async function unlockChannelForUser(dbUrl, basePath, b, p, uid, chKey, isAdm) {
+async function unlockChannelForUser(dbUrl, basePath, b, p, uid, chKey, isAdm, isVip) {
   const token = b.token;
   const unlockPrice = numOrDef(b.channelUnlockPrice, 1);
+  const autoPrice = numOrDef(b.autoChannelPrice, 100);
 
   if (isChannelUnlockedByUser(p, chKey)) {
     await sendBotMsg(
       token,
       uid,
-      `✅ <b>Channel</b> <code>${escHtml(chKey)}</code> <b>is ALREADY Unlocked!</b>\nYou can send unlimited Reactions, Views, Poll Votes & Line Votes to it now.`,
-      buildOrderSubKeyboard(unlockPrice)
+      `✅ <b>Channel</b> <code>${escHtml(chKey)}</code> <b>is ALREADY Unlocked for manual orders!</b>`,
+      buildOrderSubKeyboard(unlockPrice, autoPrice, isVip)
     );
     return;
   }
@@ -417,7 +423,7 @@ async function unlockChannelForUser(dbUrl, basePath, b, p, uid, chKey, isAdm) {
   p.balance = Number((bal - unlockPrice).toFixed(2));
   if (!Array.isArray(p.unlockedChannels)) p.unlockedChannels = [];
   p.unlockedChannels.push(chKey.toLowerCase());
-  addHistory(p, `🔓 Unlocked Channel ${chKey}: -₹${fmtRs(unlockPrice)}`);
+  addHistory(p, `🔓 Unlocked Manual Channel ${chKey}: -₹${fmtRs(unlockPrice)}`);
 
   await savePlayerState(dbUrl, basePath, uid, p);
 
@@ -430,12 +436,145 @@ async function unlockChannelForUser(dbUrl, basePath, b, p, uid, chKey, isAdm) {
       `💸 <b>Deducted:</b> <code>-₹${fmtRs(unlockPrice)}</code>\n` +
       `💰 <b>Remaining Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
       `🔥 <b>You can now send UNLIMITED ❤️ 73+ Reactions, 👀 Post Views, 📊 Poll Votes & 🔘 Line Votes to</b> <code>${escHtml(chKey)}</code>!`,
-    buildOrderSubKeyboard(unlockPrice)
+    buildOrderSubKeyboard(unlockPrice, autoPrice, isVip)
   );
 }
 
 // ============================================================================
-// 6. LIVE FORCE-JOIN CHANNEL CHECKER (PUBLIC & PRIVATE CHANNELS)
+// 6. VIP AUTO CHANNEL REACTION & VIEWS ENGINE (NEW POST DETECTOR!)
+// ============================================================================
+/**
+ * Triggered automatically whenever ANY new post is uploaded in a channel where the Bot is Admin!
+ */
+async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost) {
+  if (!channelPost || !channelPost.chat || !channelPost.message_id) return;
+
+  const token = b.token;
+  const chat = channelPost.chat;
+  const msgId = channelPost.message_id;
+  const chatUsername = chat.username ? "@" + String(chat.username).toLowerCase() : "";
+  const chatIdStr = String(chat.id || "");
+  const chatTitle = chat.title || chatUsername || chatIdStr;
+
+  const autoChannels = node.autoChannels || b.autoChannels || {};
+  const keyByUsername = chatUsername ? sanitizeFirebaseKey(chatUsername) : "";
+  const keyById = chatIdStr ? sanitizeFirebaseKey(chatIdStr) : "";
+
+  const autoCfg =
+    (keyByUsername && autoChannels[keyByUsername]) ||
+    (keyById && autoChannels[keyById]) ||
+    null;
+
+  // If this channel is not registered for VIP Auto Reaction & Views, ignore silently
+  if (!autoCfg || autoCfg.active === false) return;
+
+  // Build exact Telegram Post Link for SMM Panel API
+  let postLink = "";
+  if (chat.username) {
+    postLink = `https://t.me/${chat.username}/${msgId}`;
+  } else if (chatIdStr.startsWith("-100")) {
+    postLink = `https://t.me/c/${chatIdStr.replace(/^-100/, "")}/${msgId}`;
+  } else {
+    return;
+  }
+
+  const limitCount = autoCfg.limitCount || "";
+  const emoji = autoCfg.emoji || "RANDOM";
+  const emojiList = Array.isArray(autoCfg.emojiList) ? autoCfg.emojiList : [];
+  const emojiLabel = autoCfg.emojiLabel || emoji;
+  const ownerUid = String(autoCfg.ownerUid || "");
+  const qtyDisplay = limitCount ? limitCount : "ALL IDs";
+
+  // 1. Automatically Trigger Post Views + Post Reactions in parallel!
+  let viewsReply = "✅ Auto Views Delivered!";
+  let reactReply = "✅ Auto Reactions Delivered!";
+
+  try {
+    const viewPayload = {
+      action: "boost_views",
+      webPin: MASTER_PIN,
+      postLink: postLink,
+      selectedPhones: ["ALL"],
+      limitCount: limitCount
+    };
+
+    const reactPayload = {
+      action: "send_reaction",
+      webPin: MASTER_PIN,
+      postLink: postLink,
+      selectedPhones: ["ALL"],
+      emoji: emoji,
+      limitCount: limitCount
+    };
+    if (emojiList.length > 0) {
+      reactPayload.emojiList = emojiList;
+    }
+
+    const [vRes, rRes] = await Promise.all([
+      fetch(SMM_PANEL_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(viewPayload)
+      }).then((r) => r.json()).catch(() => null),
+      fetch(SMM_PANEL_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reactPayload)
+      }).then((r) => r.json()).catch(() => null)
+    ]);
+
+    if (vRes && vRes.reply) viewsReply = vRes.reply;
+    if (rRes && rRes.reply) reactReply = rRes.reply;
+  } catch (e) {}
+
+  // 2. Update stats and notify VIP owner on Telegram
+  autoCfg.totalAutoPosts = numOrDef(autoCfg.totalAutoPosts, 0) + 1;
+  autoCfg.lastPostLink = postLink;
+  autoCfg.lastTriggeredAt = timeStampStr();
+
+  const saveKey = keyByUsername && autoChannels[keyByUsername] ? keyByUsername : keyById;
+  if (saveKey) {
+    await fbRequest(dbUrl, `${basePath}/autoChannels/${saveKey}`, "PUT", autoCfg);
+  }
+
+  b.totalOrders = numOrDef(b.totalOrders, 0) + 2;
+  await saveBotConfig(dbUrl, basePath, b);
+
+  if (ownerUid) {
+    const players = node.playersMap || {};
+    const ownerProf = players[ownerUid];
+    if (ownerProf) {
+      const ordId = "AUTO-" + Math.floor(10000 + Math.random() * 90000);
+      if (!Array.isArray(ownerProf.orders)) ownerProf.orders = [];
+      ownerProf.orders.unshift({
+        id: ordId,
+        type: `⚡ Auto Views + Reactions (${emojiLabel}) [${qtyDisplay}]`,
+        link: postLink,
+        status: "🟢 AUTO DELIVERED",
+        date: timeStampStr()
+      });
+      if (ownerProf.orders.length > 15) ownerProf.orders = ownerProf.orders.slice(0, 15);
+      addHistory(ownerProf, `⚡ Auto Views & Reactions delivered on ${postLink}`);
+      await savePlayerState(dbUrl, basePath, ownerUid, ownerProf);
+    }
+
+    await sendBotMsg(
+      token,
+      ownerUid,
+      `⚡ <b>VIP AUTO CHANNEL REACTION & VIEWS DELIVERED!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📢 <b>Channel:</b> ${escHtml(chatTitle)}\n` +
+        `🎯 <b>New Post Detected:</b> <code>${escHtml(postLink)}</code>\n` +
+        `❤️ <b>Auto Reactions:</b> ${escHtml(emojiLabel)} (<code>${escHtml(qtyDisplay)}</code>)\n` +
+        `👀 <b>Auto Views:</b> <code>${escHtml(qtyDisplay)}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `${reactReply}`
+    );
+  }
+}
+
+// ============================================================================
+// 7. LIVE FORCE-JOIN CHANNEL CHECKER (PUBLIC & PRIVATE CHANNELS)
 // ============================================================================
 async function verifyForceJoinLive(token, b, uid) {
   if (isBotAdmin(b, uid)) return true;
@@ -491,13 +630,14 @@ async function verifyForceJoinLive(token, b, uid) {
 }
 
 // ============================================================================
-// 7. PLAYER INITIALIZATION HELPER
+// 8. PLAYER INITIALIZATION HELPER
 // ============================================================================
 function getOrInitPlayer(players, b, uid, name, uname) {
   const sUid = String(uid);
   let p = players[sUid];
   if (!p) {
     const joinBon = numOrDef(b.joinReward, 0);
+    const isAlreadyVip = Array.isArray(b.vipUsers) && b.vipUsers.map(String).includes(sUid);
     p = {
       id: sUid,
       name: name || "User " + sUid,
@@ -510,6 +650,7 @@ function getOrInitPlayer(players, b, uid, name, uname) {
       lastDaily: 0,
       state: "IDLE",
       banned: false,
+      isVip: isAlreadyVip,
       tempTopupAmt: 0,
       tempTopupTime: 0,
       tempOrderLink: "",
@@ -517,12 +658,15 @@ function getOrInitPlayer(players, b, uid, name, uname) {
       tempEmojiRaw: "RANDOM",
       tempPollOpt: "1",
       tempLineVoteMode: "LAST",
+      tempAutoChannelKey: "",
+      tempAutoEmojiRaw: "RANDOM",
       tempSupportUid: "",
       tempPrivId: "",
       tempCodeName: "",
       tempCodeAmt: 1,
       tempModUid: "",
       unlockedChannels: [],
+      autoChannels: [],
       orders: [],
       history: joinBon > 0 ? [`🎁 Welcome Bonus: +₹${fmtRs(joinBon)}`] : []
     };
@@ -532,8 +676,12 @@ function getOrInitPlayer(players, b, uid, name, uname) {
     if (uname) p.username = uname;
     if (typeof p.balance !== "number" || isNaN(p.balance)) p.balance = Number(p.balance) || 0;
     if (!Array.isArray(p.unlockedChannels)) p.unlockedChannels = [];
+    if (!Array.isArray(p.autoChannels)) p.autoChannels = [];
     if (!Array.isArray(p.orders)) p.orders = [];
     if (!Array.isArray(p.history)) p.history = [];
+    if (Array.isArray(b.vipUsers) && b.vipUsers.map(String).includes(sUid)) {
+      p.isVip = true;
+    }
     if (!p.state && p.step) p.state = p.step;
     if (!p.state) p.state = "IDLE";
   }
@@ -541,7 +689,7 @@ function getOrInitPlayer(players, b, uid, name, uname) {
 }
 
 // ============================================================================
-// 8. EXECUTE SMM ORDER WITH QUANTITY (REACTION, VIEWS, POLL, LINE VOTE)
+// 9. EXECUTE MANUAL SMM ORDER WITH QUANTITY (REACTION, VIEWS, POLL, LINE VOTE)
 // ============================================================================
 async function executeSmmOrderWithQuantity(
   dbUrl,
@@ -557,10 +705,12 @@ async function executeSmmOrderWithQuantity(
   emojiList,
   pollOpt,
   buttonTarget,
-  limitCount
+  limitCount,
+  isVip
 ) {
   const token = b.token;
   const unlockPrice = numOrDef(b.channelUnlockPrice, 1);
+  const autoPrice = numOrDef(b.autoChannelPrice, 100);
   const qtyDisplay = limitCount ? limitCount : "ALL IDs";
 
   await sendBotMsg(
@@ -572,7 +722,7 @@ async function executeSmmOrderWithQuantity(
       `🔢 <b>Quantity:</b> <code>${escHtml(qtyDisplay)}</code>\n` +
       `📢 <b>Channel:</b> <code>${escHtml(chKey)}</code> (🟢 Unlocked)\n` +
       `🎯 <b>Post:</b> <code>${escHtml(postLink)}</code>`,
-    buildOrderSubKeyboard(unlockPrice)
+    buildOrderSubKeyboard(unlockPrice, autoPrice, isVip)
   );
 
   try {
@@ -631,20 +781,20 @@ async function executeSmmOrderWithQuantity(
         `📢 <b>Unlocked Channel:</b> <code>${escHtml(chKey)}</code>\n` +
         `💰 <b>Charge:</b> <code>₹0 (Channel Unlocked!)</code>\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n${replyStr}`,
-      buildOrderSubKeyboard(unlockPrice)
+      buildOrderSubKeyboard(unlockPrice, autoPrice, isVip)
     );
   } catch (e) {
     await sendBotMsg(
       token,
       uid,
       `✅ <b>Order Queued for</b> <code>${escHtml(postLink)}</code>!`,
-      buildOrderSubKeyboard(unlockPrice)
+      buildOrderSubKeyboard(unlockPrice, autoPrice, isVip)
     );
   }
 }
 
 // ============================================================================
-// 9. MAIN VERCEL SERVERLESS HANDLER (WEBHOOK + APP API)
+// 10. MAIN VERCEL SERVERLESS HANDLER (WORKS AS api/bot.js OR api/bot1.js!)
 // ============================================================================
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -655,10 +805,16 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Dynamically detect whether file is hosted at /api/bot or /api/bot1
+  const host = req.headers?.host || "kumartelegrambot.vercel.app";
+  const pathOnly = (req.url || "/api/bot").split("?")[0];
+  const dynamicWebhookBase = `https://${host}${pathOnly}`;
+
   if (req.method === "GET") {
     return res.status(200).json({
       ok: true,
-      engine: "Kurmurya 24/7 Cloud Webhook Engine (73+ Emojis, Views, Poll, Line Vote & Quantity)",
+      endpoint: dynamicWebhookBase,
+      engine: "Kurmurya 24/7 Cloud Webhook Engine (VIP Auto Channel Reaction + 73+ Emojis + Quantity)",
       status: "24/7_ONLINE"
     });
   }
@@ -667,7 +823,7 @@ export default async function handler(req, res) {
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 
   // --------------------------------------------------------------------------
-  // A. APP / API DIRECT COMMANDS (IF APP CALLS /api/bot WITHOUT TELEGRAM UPDATE)
+  // A. APP / API DIRECT COMMANDS (IF APP CALLS /api/bot OR /api/bot1)
   // --------------------------------------------------------------------------
   if (!botId && body.action) {
     try {
@@ -675,6 +831,7 @@ export default async function handler(req, res) {
         const token = String(body.token || "").trim();
         const owner = String(body.adminId || body.owner || MASTER_ADMIN).replace(/\D/g, "");
         const chPrice = numOrDef(body.channelUnlockPrice, 1);
+        const autoPrice = numOrDef(body.autoChannelPrice, 100);
 
         const meRes = await tgPost(token, "getMe", {});
         if (!meRes || !meRes.ok) {
@@ -684,8 +841,19 @@ export default async function handler(req, res) {
         const uname = meRes.result.username || "Bot";
         const bName = meRes.result.first_name || "Reaction Bot";
 
-        const whUrl = `${WEBHOOK_BASE_URL}?botId=${encodeURIComponent(bId)}`;
-        await tgPost(token, "setWebhook", { url: whUrl, drop_pending_updates: false });
+        const whUrl = `${dynamicWebhookBase}?botId=${encodeURIComponent(bId)}`;
+        await tgPost(token, "setWebhook", {
+          url: whUrl,
+          drop_pending_updates: false,
+          allowed_updates: [
+            "message",
+            "edited_message",
+            "channel_post",
+            "edited_channel_post",
+            "callback_query",
+            "my_chat_member"
+          ]
+        });
 
         const existing = (await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "GET")) || {};
         const cfg = existing.botConfig || {
@@ -696,19 +864,23 @@ export default async function handler(req, res) {
           owner,
           active: true,
           webhookActive: true,
+          webhookAllowedUpdatesFixed: true,
           webhookUrl: whUrl,
           channelUnlockPrice: chPrice,
+          autoChannelPrice: autoPrice,
           dailyBonus: 0.5,
           referBonus: 1.0,
           joinReward: 0.0,
           upiId: "Set UPI in Admin Panel",
           qrPhoto: "",
           channels: [],
+          vipUsers: [],
           totalOrders: 0
         };
         cfg.token = token;
         cfg.owner = owner;
         cfg.webhookActive = true;
+        cfg.webhookAllowedUpdatesFixed = true;
         cfg.webhookUrl = whUrl;
         cfg.active = true;
 
@@ -716,6 +888,7 @@ export default async function handler(req, res) {
           ...existing,
           botConfig: cfg,
           playersMap: existing.playersMap || {},
+          autoChannels: existing.autoChannels || {},
           topupRequests: existing.topupRequests || {},
           giftCodesMap: existing.giftCodesMap || {},
           supportTickets: existing.supportTickets || {},
@@ -731,8 +904,8 @@ export default async function handler(req, res) {
           `👑 <b>24/7 CLOUD WEBHOOK CONNECTED!</b>\n\n` +
             `🤖 <b>Bot:</b> @${escHtml(uname)}\n` +
             `🆔 <b>Admin ID:</b> <code>${owner}</code>\n` +
-            `🔓 <b>Channel Unlock Rate:</b> <code>₹${fmtRs(cfg.channelUnlockPrice)} / Channel</code>\n` +
-            `🔥 <b>Services:</b> <code>73+ Reactions, Views, Poll & Line Vote + Quantity</code>\n\n` +
+            `🔓 <b>Manual Channel Unlock:</b> <code>₹${fmtRs(cfg.channelUnlockPrice)} / Channel</code>\n` +
+            `⚡ <b>VIP Auto Channel Rate:</b> <code>₹${fmtRs( numOrDef(cfg.autoChannelPrice, 100) )} / Channel</code>\n\n` +
             `👇 Send <b>/start</b> to open the Photo Menu & <b>👑 Admin Panel</b>!`,
           buildMainPhotoKeyboard(true)
         );
@@ -748,7 +921,7 @@ export default async function handler(req, res) {
   // B. 24/7 TELEGRAM WEBHOOK UPDATE HANDLER (?botId=...)
   // --------------------------------------------------------------------------
   const upd = body;
-  if (!botId || (!upd.message && !upd.callback_query)) {
+  if (!botId || (!upd.message && !upd.callback_query && !upd.channel_post && !upd.edited_channel_post)) {
     return res.status(200).send("OK");
   }
 
@@ -763,7 +936,26 @@ export default async function handler(req, res) {
     const token = b.token;
     if (!token) return res.status(200).send("NO_TOKEN");
 
-    // 1. DEDUPLICATE UPDATE_ID SO THE BOT NEVER SENDS DUPLICATE MESSAGES!
+    // Ensure channel_post updates are enabled on Telegram Webhook automatically
+    if (!b.webhookAllowedUpdatesFixed) {
+      b.webhookAllowedUpdatesFixed = true;
+      const whTarget = b.webhookUrl || `${dynamicWebhookBase}?botId=${encodeURIComponent(botId)}`;
+      await tgPost(token, "setWebhook", {
+        url: whTarget,
+        drop_pending_updates: false,
+        allowed_updates: [
+          "message",
+          "edited_message",
+          "channel_post",
+          "edited_channel_post",
+          "callback_query",
+          "my_chat_member"
+        ]
+      });
+      await saveBotConfig(dbUrl, basePath, b);
+    }
+
+    // 1. DEDUPLICATE UPDATE_ID
     const incomingUpdateId = Number(upd.update_id || 0);
     const lastProcessedId = Number(node.lastWebhookUpdateId || 0);
     if (incomingUpdateId > 0 && incomingUpdateId === lastProcessedId) {
@@ -773,9 +965,22 @@ export default async function handler(req, res) {
       await fbRequest(dbUrl, `${basePath}/lastWebhookUpdateId`, "PUT", incomingUpdateId);
     }
 
+    // 2. HANDLE AUTOMATIC CHANNEL POSTS (WHEN ANY POST IS UPLOADED IN A VIP AUTO CHANNEL!)
+    if (upd.channel_post) {
+      if (b.active !== false && b.isRunning !== false) {
+        await handleAutomaticChannelPost(dbUrl, basePath, b, node, upd.channel_post);
+      }
+      return res.status(200).send("AUTO_CHANNEL_POST_OK");
+    }
+
+    if (!upd.message && !upd.callback_query) {
+      return res.status(200).send("OK");
+    }
+
     // Normalize settings if stored under b.settings
     if (b.settings && typeof b.settings === "object") {
       if (b.channelUnlockPrice === undefined) b.channelUnlockPrice = b.settings.channelUnlockPrice;
+      if (b.autoChannelPrice === undefined) b.autoChannelPrice = b.settings.autoChannelPrice;
       if (b.dailyBonus === undefined) b.dailyBonus = b.settings.dailyBonus;
       if (b.referBonus === undefined) b.referBonus = b.settings.referBonus;
       if (!b.upiId) b.upiId = b.settings.upiId;
@@ -784,6 +989,7 @@ export default async function handler(req, res) {
 
     const ownerId = String(b.owner || b.adminId || MASTER_ADMIN);
     const chUnlockPrice = numOrDef(b.channelUnlockPrice, 1);
+    const autoChannelPrice = numOrDef(b.autoChannelPrice, 100);
     const dailyBonus = numOrDef(b.dailyBonus, 0.5);
     const referBonus = numOrDef(b.referBonus, 1);
 
@@ -796,6 +1002,7 @@ export default async function handler(req, res) {
     }
 
     const players = node.playersMap || node.users || {};
+    const autoChannels = node.autoChannels || {};
     const topupRequests = node.topupRequests || {};
     const giftCodesMap = node.giftCodesMap || node.redeemCodes || {};
 
@@ -813,6 +1020,7 @@ export default async function handler(req, res) {
     const isBrandNewUser = !players[cUid];
     const p = getOrInitPlayer(players, b, cUid, cName, cUname);
     const isAdm = isBotAdmin(b, cUid);
+    const isVip = isVipUser(b, p, cUid);
     const mainKb = buildMainPhotoKeyboard(isAdm);
 
     // Check Ban
@@ -830,7 +1038,6 @@ export default async function handler(req, res) {
       const data = String(cbq.data || "").trim();
       const cbId = cbq.id;
 
-      // 1. Verify Force-Join Button
       if (data === "VERIFY_FORCE_JOIN") {
         const joinedOk = await verifyForceJoinLive(token, b, cUid);
         if (joinedOk) {
@@ -847,15 +1054,13 @@ export default async function handler(req, res) {
         return res.status(200).send("OK");
       }
 
-      // 2. Inline Channel Unlock Button: "UNLOCK_CH|<channelKey>"
       if (data.startsWith("UNLOCK_CH|")) {
         const chKey = data.substring("UNLOCK_CH|".length);
         await answerCb(token, cbId, "Processing channel unlock...", false);
-        await unlockChannelForUser(dbUrl, basePath, b, p, cUid, chKey, isAdm);
+        await unlockChannelForUser(dbUrl, basePath, b, p, cUid, chKey, isAdm, isVip);
         return res.status(200).send("OK");
       }
 
-      // 3. Admin Support Reply Button: "REPLY_USER|<targetUid>"
       if (data.startsWith("REPLY_USER|") && isAdm) {
         const targetUid = data.substring("REPLY_USER|".length);
         p.state = "ADM_REPLY_USER";
@@ -874,7 +1079,6 @@ export default async function handler(req, res) {
         return res.status(200).send("OK");
       }
 
-      // 4. Admin Approve / Reject Top-Up Buttons: "TOPUP_OK|<reqId>" or "TOPUP_NO|<reqId>"
       if ((data.startsWith("TOPUP_OK|") || data.startsWith("TOPUP_NO|")) && isAdm) {
         const approve = data.startsWith("TOPUP_OK|");
         const reqId = data.substring(9);
@@ -954,6 +1158,16 @@ export default async function handler(req, res) {
         ? photoArr[photoArr.length - 1].file_id || ""
         : "";
 
+    // If user forwarded a post from their channel, auto-extract channel username or -100 ID
+    let forwardedChannelKey = "";
+    if (msgObj.forward_from_chat && msgObj.forward_from_chat.type === "channel") {
+      if (msgObj.forward_from_chat.username) {
+        forwardedChannelKey = "@" + String(msgObj.forward_from_chat.username).toLowerCase();
+      } else if (msgObj.forward_from_chat.id) {
+        forwardedChannelKey = String(msgObj.forward_from_chat.id);
+      }
+    }
+
     // Track referral on first /start REF_<inviterId>
     if (isBrandNewUser && text.startsWith("/start ")) {
       const parts = text.split(/\s+/);
@@ -965,7 +1179,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 1. LIVE FORCE-JOIN CHECK ON EVERY MESSAGE (IF USER LEAVES CHANNEL -> BLOCK IMMEDIATELY!)
+    // 1. LIVE FORCE-JOIN CHECK ON EVERY MESSAGE
     const joinedOk = await verifyForceJoinLive(token, b, cUid);
     if (!joinedOk) {
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -1011,14 +1225,17 @@ export default async function handler(req, res) {
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
       const uCount = Array.isArray(p.unlockedChannels) ? p.unlockedChannels.length : 0;
+      const autoCount = Array.isArray(p.autoChannels) ? p.autoChannels.length : 0;
 
       const welcomeMsg =
         `👑 <b>WELCOME TO @${escHtml(String(b.username || "BOT").toUpperCase())}</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `👤 <b>User:</b> ${escHtml(cName)} (<code>${cUid}</code>)\n` +
+        `🏅 <b>Account Status:</b> ${isVip ? "👑 <b>VIP MEMBER</b>" : "🟢 Standard Member"}\n` +
         `💰 <b>Wallet Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
         `🔓 <b>Unlocked Channels:</b> <code>${uCount} Channel(s)</code>\n` +
-        `🏷️ <b>Channel Unlock Rate:</b> <code>₹${fmtRs(chUnlockPrice)} / Channel (Unlimited 73+ Reactions, Views, Polls & Line Votes!)</code>\n\n` +
+        (isVip ? `⚡ <b>Auto Reaction Channels:</b> <code>${autoCount} Active</code>\n` : "") +
+        `🏷️ <b>Manual Channel Unlock:</b> <code>₹${fmtRs(chUnlockPrice)} / Channel</code>\n\n` +
         `👇 <b>Select an option from the menu below:</b>`;
 
       await sendBotMsg(token, cUid, welcomeMsg, mainKb);
@@ -1026,25 +1243,114 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // 3. TOP-LEVEL PHOTO MENU BUTTONS & 4 ORDER SERVICES
+    // 3. TOP-LEVEL PHOTO MENU BUTTONS & ORDER SERVICES (NORMAL vs VIP)
     // ========================================================================
     if (text === "👁️ Order View") {
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
       const uCount = Array.isArray(p.unlockedChannels) ? p.unlockedChannels.length : 0;
+      const autoCount = Array.isArray(p.autoChannels) ? p.autoChannels.length : 0;
 
-      const msg =
+      let msg =
         `👁️ <b>ORDER VIEW — REACTION, VIEWS, POLL & LINE VOTE</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `💰 <b>Your Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
-        `🔓 <b>Unlocked Channels:</b> <code>${uCount}</code>\n\n` +
-        `📌 <b>Mandatory ₹${fmtRs(chUnlockPrice)} Channel Rule:</b>\n` +
-        `• Set/Unlock your channel once for <b>-₹${fmtRs(chUnlockPrice)}</b>.\n` +
-        `• Once unlocked, send <b>UNLIMITED ❤️ 73+ Reactions, 👀 Post Views, 📊 Poll Votes & 🔘 Line Votes</b> with custom Quantity (1, 2, 3, 4, 5...) for FREE!\n` +
-        `• Without unlocking a channel for ₹${fmtRs(chUnlockPrice)}, orders will not go to that channel.\n\n` +
-        `👇 <b>Select a service below:</b>`;
+        `🔓 <b>Unlocked Manual Channels:</b> <code>${uCount}</code>\n`;
 
-      await sendBotMsg(token, cUid, msg, buildOrderSubKeyboard(chUnlockPrice));
+      if (isVip) {
+        msg +=
+          `👑 <b>VIP Status:</b> <code>ACTIVE</code> | ⚡ <b>Auto Channels:</b> <code>${autoCount}</code>\n\n` +
+          `📌 <b>1. Manual Channel Unlock (₹${fmtRs(chUnlockPrice)}):</b>\n` +
+          `• Unlock a channel for ₹${fmtRs(chUnlockPrice)} to send unlimited manual Reactions, Views, Polls & Line Votes.\n\n` +
+          `⚡ <b>2. VIP Auto Reaction & Views (₹${fmtRs(autoChannelPrice)} Recharge):</b>\n` +
+          `• Make this Bot Admin in your channel & activate Auto Mode for <b>₹${fmtRs(autoChannelPrice)}</b>.\n` +
+          `• Whenever ANY new post is uploaded in your channel, Auto Views & Auto Reactions will be delivered automatically 24/7!\n\n`;
+      } else {
+        msg +=
+          `\n📌 <b>Mandatory ₹${fmtRs(chUnlockPrice)} Channel Rule:</b>\n` +
+          `• Set/Unlock your channel once for <b>-₹${fmtRs(chUnlockPrice)}</b>.\n` +
+          `• Once unlocked, send <b>UNLIMITED ❤️ 73+ Reactions, 👀 Post Views, 📊 Poll Votes & 🔘 Line Votes</b> with custom Quantity (1, 2, 3, 4, 5...) for FREE!\n\n`;
+      }
+
+      msg += `👇 <b>Select a service below:</b>`;
+
+      await sendBotMsg(token, cUid, msg, buildOrderSubKeyboard(chUnlockPrice, autoChannelPrice, isVip));
+      return res.status(200).send("OK");
+    }
+
+    // ---- VIP EXCLUSIVE BUTTON 1: ⚡ Auto Reaction & Views (₹100) ----
+    if (text.startsWith("⚡ Auto Reaction & Views")) {
+      if (!isVip) {
+        // Hidden from normal users; if typed manually, block access
+        await sendBotMsg(
+          token,
+          cUid,
+          `🔒 <b>VIP EXCLUSIVE FEATURE!</b>\n\nOnly VIP Members approved by the Admin can use <b>⚡ Auto Channel Reaction & Views</b>.`,
+          mainKb
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (numOrDef(p.balance, 0) < autoChannelPrice) {
+        await sendBotMsg(
+          token,
+          cUid,
+          `❌ <b>INSUFFICIENT BALANCE FOR VIP AUTO CHANNEL!</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `⚡ <b>Feature:</b> 24/7 Automatic Channel Views & Reactions\n` +
+            `🏷️ <b>Required Recharge:</b> <code>₹${fmtRs(autoChannelPrice)} / Channel</code>\n` +
+            `💰 <b>Your Wallet Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
+            `⚠️ <i>Note: ₹${fmtRs(chUnlockPrice)} manual unlock does NOT apply to Automatic Mode. Please tap <b>💳 Top Up</b> and recharge ₹${fmtRs(autoChannelPrice)} first!</i>`,
+          buildOrderSubKeyboard(chUnlockPrice, autoChannelPrice, isVip)
+        );
+        return res.status(200).send("OK");
+      }
+
+      p.state = "WAIT_VIP_AUTO_CH_INPUT";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `⚡ <b>SETUP VIP 24/7 AUTO CHANNEL REACTION & VIEWS</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `🏷️ <b>Activation Charge:</b> <code>-₹${fmtRs(autoChannelPrice)} (One-Time per Channel)</code>\n` +
+          `💰 <b>Your Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
+          `📌 <b>IMPORTANT STEP 1:</b>\n` +
+          `First, add this Bot (<b>@${escHtml(b.username || "Bot")}</b>) as an <b>Administrator</b> in your Telegram Channel!\n\n` +
+          `👇 <b>STEP 1 OF 3: Send your Channel <code>@username</code>, Private Channel ID (<code>-100...</code>), OR forward any post from your channel here:</b>`,
+        buildCancelKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    // ---- VIP EXCLUSIVE BUTTON 2: 🤖 My Auto Channels ----
+    if (text === "🤖 My Auto Channels") {
+      if (!isVip) return res.status(200).send("OK");
+      p.state = "IDLE";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      const myAutoList = [];
+      for (const k of Object.keys(autoChannels)) {
+        const ac = autoChannels[k];
+        if (ac && (String(ac.ownerUid) === cUid || isAdm)) {
+          myAutoList.push(ac);
+        }
+      }
+
+      let sb = `🤖 <b>MY 24/7 AUTO REACTION & VIEW CHANNELS</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+      if (myAutoList.length === 0) {
+        sb += `📭 You haven't activated any Auto Channel yet!\nTap <b>⚡ Auto Reaction & Views (₹${fmtRs(autoChannelPrice)})</b> to activate 24/7 automatic reactions & views on your channel.`;
+      } else {
+        myAutoList.forEach((ac, idx) => {
+          sb +=
+            `<b>[${idx + 1}] <code>${escHtml(ac.channelKey)}</code> (${escHtml(ac.title || "Channel")})</b>\n` +
+            ` ┣ ❤️ Emoji: ${escHtml(ac.emojiLabel || ac.emoji || "RANDOM")}\n` +
+            ` ┣ 🔢 Quantity per Post: <code>${escHtml(ac.limitCount || "ALL IDs")}</code>\n` +
+            ` ┗ 📦 Auto Posts Delivered: <code>${numOrDef(ac.totalAutoPosts, 0)}</code> (🟢 24/7 ACTIVE)\n\n`;
+        });
+      }
+      await sendBotMsg(token, cUid, sb, buildOrderSubKeyboard(chUnlockPrice, autoChannelPrice, isVip));
       return res.status(200).send("OK");
     }
 
@@ -1055,7 +1361,7 @@ export default async function handler(req, res) {
       await sendBotMsg(
         token,
         cUid,
-        `🔓 <b>SET / UNLOCK CHANNEL (₹${fmtRs(chUnlockPrice)})</b>\n` +
+        `🔓 <b>SET / UNLOCK MANUAL CHANNEL (₹${fmtRs(chUnlockPrice)})</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `💰 <b>Your Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
           `🏷️ <b>One-Time Unlock Charge:</b> <code>-₹${fmtRs(chUnlockPrice)}</code>\n\n` +
@@ -1070,19 +1376,18 @@ export default async function handler(req, res) {
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
       const uArr = Array.isArray(p.unlockedChannels) ? p.unlockedChannels : [];
-      let sb = `📋 <b>MY UNLOCKED CHANNELS</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+      let sb = `📋 <b>MY UNLOCKED MANUAL CHANNELS</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
       if (uArr.length === 0) {
         sb += `📭 You haven't unlocked any channel yet!\nTap <b>🔓 Set / Unlock Channel (₹${fmtRs(chUnlockPrice)})</b> first.`;
       } else {
         uArr.forEach((ch, idx) => {
-          sb += `${idx + 1}. <code>${escHtml(ch)}</code> — 🟢 <b>UNLIMITED ACTIVE</b>\n`;
+          sb += `${idx + 1}. <code>${escHtml(ch)}</code> — 🟢 <b>UNLIMITED MANUAL ACTIVE</b>\n`;
         });
       }
-      await sendBotMsg(token, cUid, sb, buildOrderSubKeyboard(chUnlockPrice));
+      await sendBotMsg(token, cUid, sb, buildOrderSubKeyboard(chUnlockPrice, autoChannelPrice, isVip));
       return res.status(200).send("OK");
     }
 
-    // SERVICE 1: ❤️ Channel Reaction (All 73+ Emojis + Quantity)
     if (text === "❤️ Channel Reaction") {
       p.state = "WAIT_REACT_LINK";
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -1100,7 +1405,6 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // SERVICE 2: 👀 Post Views (With Quantity)
     if (text === "👀 Post Views") {
       p.state = "WAIT_VIEWS_LINK";
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -1118,7 +1422,6 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // SERVICE 3: 📊 Vote Poll (With Option Number + Quantity)
     if (text === "📊 Vote Poll") {
       p.state = "WAIT_POLL_LINK";
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -1136,7 +1439,6 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // SERVICE 4: 🔘 Line Vote (Channel Post Inline Button Clicker + Quantity)
     if (text === "🔘 Line Vote") {
       p.state = "WAIT_LINEVOTE_LINK";
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -1177,6 +1479,7 @@ export default async function handler(req, res) {
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
       const uCount = Array.isArray(p.unlockedChannels) ? p.unlockedChannels.length : 0;
+      const autoCount = Array.isArray(p.autoChannels) ? p.autoChannels.length : 0;
       const oCount = Array.isArray(p.orders) ? p.orders.length : 0;
 
       const prof =
@@ -1184,8 +1487,10 @@ export default async function handler(req, res) {
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🧑 <b>Name:</b> ${escHtml(cName)}\n` +
         `🆔 <b>User ID:</b> <code>${cUid}</code>\n` +
+        `🏅 <b>Membership:</b> ${isVip ? "👑 <b>VIP MEMBER</b>" : "🟢 Standard Member"}\n` +
         `💰 <b>Wallet Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
-        `🔓 <b>Unlocked Channels:</b> <code>${uCount} Channel(s)</code>\n` +
+        `🔓 <b>Unlocked Manual Channels:</b> <code>${uCount} Channel(s)</code>\n` +
+        (isVip ? `⚡ <b>Active Auto Channels:</b> <code>${autoCount} Channel(s)</code>\n` : "") +
         `📦 <b>Total Orders:</b> <code>${oCount} Orders</code>\n` +
         `👥 <b>Total Referrals:</b> <code>${numOrDef(p.referrals, 0)} Users</code>`;
 
@@ -1269,9 +1574,12 @@ export default async function handler(req, res) {
         `💳 <b>ADD FUNDS / TOP UP WALLET</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🏦 <b>UPI ID:</b> <code>${escHtml(upiId)}</code>\n` +
-        `🔓 <b>Channel Rate:</b> <code>₹${fmtRs(chUnlockPrice)} = 1 Channel (Unlimited Reactions, Views, Polls & Line Votes!)</code>\n\n` +
-        `📌 <b>STEP 1 OF 2:</b>\n` +
-        `Scan the QR Code or pay to the UPI ID above, then <b>send the Amount (₹) you paid</b> below (e.g. <code>10</code>):`;
+        `🔓 <b>Manual Channel Unlock:</b> <code>₹${fmtRs(chUnlockPrice)} = 1 Channel</code>\n` +
+        (isVip
+          ? `⚡ <b>VIP Auto Channel Rate:</b> <code>₹${fmtRs(autoChannelPrice)} = 24/7 Auto Views & Reactions</code>\n`
+          : "") +
+        `\n📌 <b>STEP 1 OF 2:</b>\n` +
+        `Scan the QR Code or pay to the UPI ID above, then <b>send the Amount (₹) you paid</b> below (e.g. <code>${isVip ? fmtRs(autoChannelPrice) : "10"}</code>):`;
 
       if (qrPhoto) {
         await sendBotPhoto(token, cUid, qrPhoto, caption, buildCancelKeyboard());
@@ -1296,24 +1604,102 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // 4. ADMIN PANEL MENU BUTTONS (FOR ADMIN ID)
+    // 4. ADMIN PANEL MENU BUTTONS (INCLUDING VIP & AUTO CHANNEL CONTROLS)
     // ========================================================================
     if (isAdm) {
       if (text === "👑 Admin Panel" || text === "👑 Pro Admin Panel" || text === "/admin") {
         p.state = "IDLE";
         await savePlayerState(dbUrl, basePath, cUid, p);
+        const vipCount = Array.isArray(b.vipUsers) ? b.vipUsers.length : 0;
+        const autoChCount = Object.keys(autoChannels).length;
+
         await sendBotMsg(
           token,
           cUid,
           `👑 <b>MASTER ADMIN PANEL (24/7 CLOUD)</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🔓 <b>Channel Unlock Price:</b> <code>₹${fmtRs(chUnlockPrice)}</code>\n` +
-            `👥 <b>Refer Bonus:</b> <code>₹${fmtRs(referBonus)}</code>\n` +
-            `🎁 <b>Daily Bonus:</b> <code>₹${fmtRs(dailyBonus)}</code>\n` +
+            `🔓 <b>Manual Channel Unlock:</b> <code>₹${fmtRs(chUnlockPrice)}</code>\n` +
+            `⚡ <b>VIP Auto Channel Price:</b> <code>₹${fmtRs(autoChannelPrice)}</code>\n` +
+            `👑 <b>VIP Members:</b> <code>${vipCount} Users</code>\n` +
+            `🤖 <b>Active Auto Channels:</b> <code>${autoChCount} Channels</code>\n` +
+            `👥 <b>Refer Bonus:</b> <code>₹${fmtRs(referBonus)}</code> | 🎁 <b>Daily:</b> <code>₹${fmtRs(dailyBonus)}</code>\n` +
             `💳 <b>UPI ID:</b> <code>${escHtml(b.upiId || "Not Set")}</code>\n\n` +
             `👇 <b>Select an Admin tool below:</b>`,
           buildAdminKeyboard()
         );
+        return res.status(200).send("OK");
+      }
+
+      if (text === "👑 Add / Remove VIP") {
+        p.state = "ADM_TOGGLE_VIP_UID";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(
+          token,
+          cUid,
+          `👑 <b>ADD / REMOVE VIP USER</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `• Normal users CANNOT see the <b>⚡ Auto Reaction & Views</b> button.\n` +
+            `• Only VIP users added here will see and use the Automatic Channel Reaction & Views feature!\n\n` +
+            `👇 <b>Send the Target User's Telegram ID to Make VIP (or Remove VIP):</b>`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (text === "👑 VIP Users List") {
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        const vList = Array.isArray(b.vipUsers) ? b.vipUsers : [];
+        let sb = `👑 <b>ACTIVE VIP MEMBERS LIST (${vList.length})</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+        if (vList.length === 0) {
+          sb += `📭 No VIP users added yet. Tap <b>👑 Add / Remove VIP</b> to add one!`;
+        } else {
+          vList.forEach((vId, idx) => {
+            const vp = players[vId];
+            sb += `${idx + 1}. <code>${vId}</code> — ${vp ? escHtml(vp.name) : "VIP User"} (💰 ₹${vp ? fmtRs(vp.balance) : "0"})\n`;
+          });
+        }
+        await sendBotMsg(token, cUid, sb, buildAdminKeyboard());
+        return res.status(200).send("OK");
+      }
+
+      if (text === "💲 Set Auto Channel ₹") {
+        p.state = "ADM_SET_AUTO_CH_PRICE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(
+          token,
+          cUid,
+          `💲 <b>SET VIP AUTO CHANNEL RECHARGE PRICE (₹)</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `Current Auto Channel Price: <code>₹${fmtRs(autoChannelPrice)} / Channel</code>\n\n` +
+            `👇 <b>Send the new ₹ price for activating 24/7 Auto Channel Reaction & Views (e.g. <code>100</code>):</b>`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (text === "📋 Auto Channels List") {
+        p.state = "ADM_REMOVE_AUTO_CH";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        const keys = Object.keys(autoChannels);
+        let sb = `🤖 <b>ALL 24/7 AUTO REACTION CHANNELS (${keys.length})</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+        if (keys.length === 0) {
+          p.state = "IDLE";
+          await savePlayerState(dbUrl, basePath, cUid, p);
+          sb += `📭 No Auto Channels registered yet.`;
+          await sendBotMsg(token, cUid, sb, buildAdminKeyboard());
+          return res.status(200).send("OK");
+        }
+        keys.forEach((k, idx) => {
+          const ac = autoChannels[k];
+          sb +=
+            `<b>[${idx + 1}] <code>${escHtml(ac.channelKey)}</code> (${escHtml(ac.title || "Channel")})</b>\n` +
+            ` ┣ 👤 Owner ID: <code>${ac.ownerUid}</code>\n` +
+            ` ┣ ❤️ Emoji: ${escHtml(ac.emojiLabel || ac.emoji)} | 🔢 Qty: <code>${escHtml(ac.limitCount || "ALL")}</code>\n` +
+            ` ┗ 📦 Auto Posts: <code>${numOrDef(ac.totalAutoPosts, 0)}</code>\n\n`;
+        });
+        sb += `👇 <i>To remove an Auto Channel, send its <code>@username</code> or <code>-100...</code> ID now, or tap ❌ Cancel:</i>`;
+        await sendBotMsg(token, cUid, sb, buildCancelKeyboard());
         return res.status(200).send("OK");
       }
 
@@ -1374,7 +1760,7 @@ export default async function handler(req, res) {
         await sendBotMsg(
           token,
           cUid,
-          `💲 <b>Send new Channel Unlock Price in ₹ (e.g. <code>1</code> or <code>2</code>):</b>`,
+          `💲 <b>Send new Manual Channel Unlock Price in ₹ (e.g. <code>1</code> or <code>2</code>):</b>`,
           buildCancelKeyboard()
         );
         return res.status(200).send("OK");
@@ -1458,15 +1844,20 @@ export default async function handler(req, res) {
         p.state = "IDLE";
         await savePlayerState(dbUrl, basePath, cUid, p);
         const chs = Array.isArray(b.channels) ? b.channels : [];
+        const vipCount = Array.isArray(b.vipUsers) ? b.vipUsers.length : 0;
+        const autoChCount = Object.keys(autoChannels).length;
         await sendBotMsg(
           token,
           cUid,
           `📊 <b>LIVE 24/7 BOT STATISTICS</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
             `👥 <b>Total Users:</b> <code>${Object.keys(players).length}</code>\n` +
+            `👑 <b>VIP Users:</b> <code>${vipCount}</code>\n` +
+            `🤖 <b>Active Auto Channels:</b> <code>${autoChCount}</code>\n` +
             `📦 <b>Total Orders:</b> <code>${numOrDef(b.totalOrders, 0)}</code>\n` +
             `📢 <b>Force Channels:</b> <code>${chs.length}</code>\n` +
-            `🔓 <b>Channel Unlock Rate:</b> <code>₹${fmtRs(chUnlockPrice)}</code>`,
+            `🔓 <b>Manual Unlock Rate:</b> <code>₹${fmtRs(chUnlockPrice)}</code>\n` +
+            `⚡ <b>VIP Auto Channel Rate:</b> <code>₹${fmtRs(autoChannelPrice)}</code>`,
           buildAdminKeyboard()
         );
         return res.status(200).send("OK");
@@ -1474,11 +1865,11 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // 5. MULTI-STEP WORKFLOWS (73+ EMOJIS + QUANTITY + LINE VOTE + TOPUP)
+    // 5. MULTI-STEP WORKFLOWS (VIP AUTO CHANNEL + 73+ EMOJIS + QUANTITY + TOPUP)
     // ========================================================================
     const st = String(p.state || "IDLE").toUpperCase();
 
-    // ---- SMART FAIL-SAFE: IF USER ALREADY ENTERED TOP-UP AMOUNT & SENDS 10-16 DIGIT UTR ----
+    // ---- SMART FAIL-SAFE: 10-16 DIGIT UTR DETECTOR ----
     const isLikelyUtrNumber = /^\d{10,16}$/.test(text);
     const hasRecentTopupAmt =
       numOrDef(p.tempTopupAmt, 0) > 0 && Date.now() - numOrDef(p.tempTopupTime, 0) < 15 * 60 * 1000;
@@ -1549,14 +1940,13 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // ---- STEP: TOP-UP STEP 1 (ENTER AMOUNT) ----
     if (st === "WAIT_TOPUP_AMOUNT") {
       const amt = parseFloat(text);
       if (isNaN(amt) || amt <= 0) {
         await sendBotMsg(
           token,
           cUid,
-          `⚠️ <b>Invalid Amount!</b> Please enter only the numeric ₹ amount you paid (e.g. <code>10</code>):`,
+          `⚠️ <b>Invalid Amount!</b> Please enter only the numeric ₹ amount you paid (e.g. <code>100</code>):`,
           buildCancelKeyboard()
         );
         return res.status(200).send("OK");
@@ -1578,7 +1968,147 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // ---- STEP: UNLOCK CHANNEL ----
+    // ---- VIP FLOW: SETUP 24/7 AUTO CHANNEL REACTION & VIEWS (₹100) ----
+    if (st === "WAIT_VIP_AUTO_CH_INPUT") {
+      const rawCh = forwardedChannelKey || extractChannelKey(text);
+      if (!rawCh) {
+        await sendBotMsg(
+          token,
+          cUid,
+          `❌ <b>Invalid Channel!</b>\nPlease send your Channel <code>@username</code>, Private ID (<code>-100...</code>), or forward a post from your channel:`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      // Verify Bot is added as Admin in the target channel!
+      const botNumericId = Number(String(token).split(":")[0]);
+      const memberCheck = await tgPost(token, "getChatMember", {
+        chat_id: rawCh,
+        user_id: botNumericId
+      });
+
+      if (!memberCheck || !memberCheck.ok || !memberCheck.result || memberCheck.result.status !== "administrator") {
+        await sendBotMsg(
+          token,
+          cUid,
+          `⚠️ <b>BOT IS NOT ADMIN IN ${escHtml(rawCh)}!</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `To detect new posts automatically 24/7, you MUST add <b>@${escHtml(b.username || "Bot")}</b> as an <b>Administrator</b> in <code>${escHtml(rawCh)}</code> first!\n\n` +
+            `👉 <i>Add the bot as Admin in your channel, then send <code>${escHtml(rawCh)}</code> again:</i>`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      p.tempAutoChannelKey = rawCh;
+      p.state = "WAIT_VIP_AUTO_EMOJI";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `✅ <b>BOT ADMIN VERIFIED IN ${escHtml(rawCh)}!</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `❤️ <b>STEP 2 OF 3: Which Emoji Reactions should come automatically on every new post?</b>\n` +
+          `Select from All 73+ Emojis below, tap <b>🎲 RANDOM</b> / <b>🔥 TOP 8 MIX</b>, or type multiple emojis separated by space:`,
+        buildAll73EmojiKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    if (st === "WAIT_VIP_AUTO_EMOJI") {
+      p.tempAutoEmojiRaw = text || "RANDOM";
+      p.state = "WAIT_VIP_AUTO_QTY";
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `🔢 <b>STEP 3 OF 3: How many Auto Views & Auto Reactions per new post?</b>\n` +
+          `👉 <b>Type any number (1, 2, 3, 4, 5, 6...)</b> or tap <b>ALL</b> below:`,
+        buildQuantityKeyboard()
+      );
+      return res.status(200).send("OK");
+    }
+
+    if (st === "WAIT_VIP_AUTO_QTY") {
+      const chKey = p.tempAutoChannelKey || "";
+      const parsedEm = parseEmojiSelectionInput(p.tempAutoEmojiRaw || "RANDOM");
+      const limitCount = parseQuantityInput(text);
+      const qtyDisplay = limitCount ? limitCount : "ALL IDs";
+
+      if (numOrDef(p.balance, 0) < autoChannelPrice) {
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(
+          token,
+          cUid,
+          `❌ <b>Insufficient Balance!</b> You need <code>₹${fmtRs(autoChannelPrice)}</code> to activate Auto Channel.`,
+          buildOrderSubKeyboard(chUnlockPrice, autoChannelPrice, isVip)
+        );
+        return res.status(200).send("OK");
+      }
+
+      // Fetch full chat details (both @username and -100 ID) so auto-detector matches either!
+      const chatInfoRes = await tgPost(token, "getChat", { chat_id: chKey });
+      const chatObj = chatInfoRes && chatInfoRes.ok ? chatInfoRes.result : {};
+      const cTitle = chatObj.title || chKey;
+      const unameKey = chatObj.username ? "@" + String(chatObj.username).toLowerCase() : "";
+      const idKey = chatObj.id ? String(chatObj.id) : "";
+
+      // Deduct ₹100 (autoChannelPrice)
+      p.balance = Number((numOrDef(p.balance, 0) - autoChannelPrice).toFixed(2));
+      p.state = "IDLE";
+      if (!Array.isArray(p.autoChannels)) p.autoChannels = [];
+      if (!p.autoChannels.includes(chKey)) p.autoChannels.push(chKey);
+      addHistory(p, `⚡ Activated VIP Auto Channel ${chKey}: -₹${fmtRs(autoChannelPrice)}`);
+
+      const autoRecord = {
+        channelKey: chKey,
+        title: cTitle,
+        chatId: idKey,
+        username: unameKey,
+        ownerUid: cUid,
+        ownerName: cName,
+        emoji: parsedEm.emoji,
+        emojiList: parsedEm.emojiList,
+        emojiLabel: parsedEm.label,
+        limitCount: limitCount,
+        pricePaid: autoChannelPrice,
+        totalAutoPosts: 0,
+        active: true,
+        createdAt: timeStampStr()
+      };
+
+      const mainKey = sanitizeFirebaseKey(chKey);
+      await fbRequest(dbUrl, `${basePath}/autoChannels/${mainKey}`, "PUT", autoRecord);
+      if (unameKey && sanitizeFirebaseKey(unameKey) !== mainKey) {
+        await fbRequest(dbUrl, `${basePath}/autoChannels/${sanitizeFirebaseKey(unameKey)}`, "PUT", autoRecord);
+      }
+      if (idKey && sanitizeFirebaseKey(idKey) !== mainKey) {
+        await fbRequest(dbUrl, `${basePath}/autoChannels/${sanitizeFirebaseKey(idKey)}`, "PUT", autoRecord);
+      }
+
+      await savePlayerState(dbUrl, basePath, cUid, p);
+
+      await sendBotMsg(
+        token,
+        cUid,
+        `🎉 <b>VIP 24/7 AUTO CHANNEL ACTIVATED!</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📢 <b>Channel:</b> ${escHtml(cTitle)} (<code>${escHtml(chKey)}</code>)\n` +
+          `❤️ <b>Auto Reactions:</b> ${escHtml(parsedEm.label)}\n` +
+          `👀 <b>Auto Views + Reactions Qty:</b> <code>${escHtml(qtyDisplay)} / Post</code>\n` +
+          `💸 <b>Recharge Deducted:</b> <code>-₹${fmtRs(autoChannelPrice)}</code>\n` +
+          `💰 <b>Remaining Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
+          `🔥 <b>Now upload ANY new post in <code>${escHtml(chKey)}</code> — Views & Reactions will arrive automatically within seconds!</b>`,
+        buildOrderSubKeyboard(chUnlockPrice, autoChannelPrice, isVip)
+      );
+      return res.status(200).send("OK");
+    }
+
+    // ---- STEP: MANUAL UNLOCK CHANNEL (₹1) ----
     if (st === "WAIT_UNLOCK_CHANNEL" || st === "WAIT_UNLOCK_CHANNEL_INPUT") {
       const chKey = extractChannelKey(text);
       if (!chKey) {
@@ -1592,7 +2122,7 @@ export default async function handler(req, res) {
       }
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
-      await unlockChannelForUser(dbUrl, basePath, b, p, cUid, chKey, isAdm);
+      await unlockChannelForUser(dbUrl, basePath, b, p, cUid, chKey, isAdm, isVip);
       return res.status(200).send("OK");
     }
 
@@ -1670,7 +2200,8 @@ export default async function handler(req, res) {
         parsedEm.emojiList,
         "",
         "LAST",
-        limitCount
+        limitCount,
+        isVip
       );
       return res.status(200).send("OK");
     }
@@ -1734,7 +2265,8 @@ export default async function handler(req, res) {
         [],
         "",
         "LAST",
-        limitCount
+        limitCount,
+        isVip
       );
       return res.status(200).send("OK");
     }
@@ -1823,7 +2355,8 @@ export default async function handler(req, res) {
         [],
         opt,
         "LAST",
-        limitCount
+        limitCount,
+        isVip
       );
       return res.status(200).send("OK");
     }
@@ -1903,7 +2436,8 @@ export default async function handler(req, res) {
         [],
         "",
         btnMode,
-        limitCount
+        limitCount,
+        isVip
       );
       return res.status(200).send("OK");
     }
@@ -1992,9 +2526,97 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // 6. ADMIN MULTI-STEP INPUT FLOWS
+    // 6. ADMIN MULTI-STEP INPUT FLOWS (VIP + AUTO CHANNEL PRICE + ALL TOOLS)
     // ========================================================================
     if (isAdm) {
+      // Admin Add / Remove VIP User
+      if (st === "ADM_TOGGLE_VIP_UID") {
+        const targetUid = text.replace(/\D/g, "");
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+
+        if (!targetUid) {
+          await sendBotMsg(token, cUid, `⚠️ Invalid User ID!`, buildAdminKeyboard());
+          return res.status(200).send("OK");
+        }
+
+        if (!Array.isArray(b.vipUsers)) b.vipUsers = [];
+        const tp = getOrInitPlayer(players, b, targetUid, "User " + targetUid, "");
+        const idx = b.vipUsers.map(String).indexOf(targetUid);
+
+        if (idx === -1) {
+          b.vipUsers.push(targetUid);
+          tp.isVip = true;
+          await saveBotConfig(dbUrl, basePath, b);
+          await savePlayerState(dbUrl, basePath, targetUid, tp);
+
+          await sendBotMsg(
+            token,
+            cUid,
+            `👑 <b>VIP ACCESS GRANTED!</b>\nUser <code>${targetUid}</code> is now a <b>VIP Member</b> and can see & use <b>⚡ Auto Reaction & Views (₹${fmtRs(autoChannelPrice)})</b>!`,
+            buildAdminKeyboard()
+          );
+          await sendBotMsg(
+            token,
+            targetUid,
+            `👑 <b>CONGRATULATIONS! YOU ARE NOW A VIP MEMBER!</b>\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `Admin has unlocked <b>⚡ VIP 24/7 Auto Channel Reaction & Views</b> in your <b>👁️ Order View</b> menu!\n\n` +
+              `👉 Tap <b>👁️ Order View</b> to see your new VIP button!`
+          );
+        } else {
+          b.vipUsers.splice(idx, 1);
+          tp.isVip = false;
+          await saveBotConfig(dbUrl, basePath, b);
+          await savePlayerState(dbUrl, basePath, targetUid, tp);
+
+          await sendBotMsg(
+            token,
+            cUid,
+            `🔒 User <code>${targetUid}</code> removed from VIP list (now Standard User).`,
+            buildAdminKeyboard()
+          );
+        }
+        return res.status(200).send("OK");
+      }
+
+      // Admin Set Auto Channel ₹ Price (Default ₹100)
+      if (st === "ADM_SET_AUTO_CH_PRICE") {
+        const v = Math.max(1, numOrDef(text, 100));
+        b.autoChannelPrice = v;
+        p.state = "IDLE";
+        await saveBotConfig(dbUrl, basePath, b);
+        await savePlayerState(dbUrl, basePath, cUid, p);
+
+        await sendBotMsg(
+          token,
+          cUid,
+          `✅ <b>VIP Auto Channel Price updated to:</b> <code>₹${fmtRs(v)} / Channel</code>!`,
+          buildAdminKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      // Admin Remove Auto Channel
+      if (st === "ADM_REMOVE_AUTO_CH") {
+        const rmKey = sanitizeFirebaseKey(extractChannelKey(text) || text);
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+
+        if (rmKey && autoChannels[rmKey]) {
+          await fbRequest(dbUrl, `${basePath}/autoChannels/${rmKey}`, "DELETE");
+          await sendBotMsg(
+            token,
+            cUid,
+            `🗑️ <b>Removed Auto Channel:</b> <code>${escHtml(text)}</code>`,
+            buildAdminKeyboard()
+          );
+        } else {
+          await sendBotMsg(token, cUid, `ℹ️ Channel not found in Auto list.`, buildAdminKeyboard());
+        }
+        return res.status(200).send("OK");
+      }
+
       if (st === "ADM_REPLY_USER" || st === "ADMIN_REPLY_SUPPORT_USER") {
         const targetUid = p.tempSupportUid || p.tempSupportTargetId || "";
         p.state = "IDLE";
@@ -2024,7 +2646,7 @@ export default async function handler(req, res) {
         await sendBotMsg(
           token,
           cUid,
-          `✅ <b>Public Force-Join Channel Added:</b> <code>${escHtml(cId)}</code>\nLive join/leave check is now active!`,
+          `✅ <b>Public Force-Join Channel Added:</b> <code>${escHtml(cId)}</code>`,
           buildAdminKeyboard()
         );
         return res.status(200).send("OK");
@@ -2098,7 +2720,7 @@ export default async function handler(req, res) {
         await sendBotMsg(
           token,
           cUid,
-          `✅ <b>Channel Unlock Price set to:</b> <code>₹${fmtRs(v)} / Channel</code>!`,
+          `✅ <b>Manual Channel Unlock Price set to:</b> <code>₹${fmtRs(v)} / Channel</code>!`,
           buildAdminKeyboard()
         );
         return res.status(200).send("OK");
@@ -2199,7 +2821,7 @@ export default async function handler(req, res) {
         await sendBotMsg(
           token,
           cUid,
-          `💰 <b>Send ₹ Amount to Add (e.g. <code>10</code>) or Cut (e.g. <code>-5</code>):</b>`,
+          `💰 <b>Send ₹ Amount to Add (e.g. <code>100</code>) or Cut (e.g. <code>-50</code>):</b>`,
           buildCancelKeyboard()
         );
         return res.status(200).send("OK");
