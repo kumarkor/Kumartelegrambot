@@ -1372,7 +1372,7 @@ export default async function handler(req, res) {
               `👇 <b>Tap below to Verify in 2 Seconds:</b>`,
             {
               inline_keyboard: [
-                [{ text: "⚡ Click Here to Verify Device", url: verifyUrl }],
+                [{ text: "🛡️ Verify Device (Mini App)", web_app: { url: verifyUrl } }],
                 [{ text: "✅ I Have Verified — Check Status", callback_data: `VERIFY_CHECK_ME|${gwId}` }]
               ]
             }
