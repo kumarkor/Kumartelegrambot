@@ -1599,7 +1599,7 @@ export default async function handler(req, res) {
           `📌 <b>Step 2:</b> After verification finishes, tap <b>✅ Check Verification Status</b> or pick your number on the Giveaway post!`,
         {
           inline_keyboard: [
-            [{ text: `⚡ Verify My Device Now (@${botUsername})`, url: verifyUrl }],
+            [{ text: `🛡️ Verify My Device (Mini App)`, web_app: { url: verifyUrl } }],
             [{ text: "✅ Check Verification Status", callback_data: `VERIFY_CHECK_ME|${gwId}` }]
           ]
         }
