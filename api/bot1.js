@@ -1485,7 +1485,10 @@ export default async function handler(req, res) {
           cUid,
           `⚠️ <b>Still Not Verified!</b>\nTap the button below to complete verification in your browser:`,
           {
-            inline_keyboard: [[{ text: "⚡ Open Verification Page", url: verifyUrl }]]
+            inline_keyboard: [
+              [{ text: "🛡️ Open Verification Mini App", web_app: { url: verifyUrl } }],
+              [{ text: "✅ Check Status Again", callback_data: `VERIFY_CHECK_ME|${gwId}` }]
+            ]
           }
         );
         return res.status(200).send("OK");
