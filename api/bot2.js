@@ -1,16 +1,16 @@
 // ============================================================================
-// 👑 FILE: api/bot2.js — 24/7 GIFT CARD & REDEEM CODE SELLING BOT ENGINE 👑
+// 👑 FILE: api/bot2.js — 24/7 DYNAMIC GIFT CARD & REDEEM CODE EXCHANGE OS 👑
 // Endpoint: https://kumartelegrambot.vercel.app/api/bot2
-// Features:
-// 1. Sell 10+ Gift Cards (Play Store, Amazon, Flipkart, Zomato, Swiggy, Myntra,
-//    BookMyShow, Steam, Free Fire/BGMI, Other) with Live % Payout Calculator
-// 2. Owner Real/Fake Verification (Approve -> Auto Credit Wallet | Reject -> Fake)
-// 3. Built-in Wallet, Balance, History, Daily Bonus, Refer & Earn, Promo Codes
-// 4. Dual Withdrawal: UPI ID (Admin Approve/Reject+Refund) + Custom Wallet API
-// 5. Live Force-Join Channel Gate (Public @username & Private -100... Channels)
-// 6. Private Mini-App 1-User 1-Device Verification (`web_app`, Blocks 403 BANNED)
-// 7. 2-Way Help / Support Desk with Admin Direct Reply Button
-// 8. 100% Compatible with Maker Bot (`connect_bot` & `delete_bot`)
+// Features (0% Bug • Firebase-Safe Array Storage):
+// 1. Zero Pre-Set Cards: Admin dynamically adds Cards (Name, Rate %, Min ₹, Max ₹)
+// 2. Instant Global Sync: Editing Rate %, Min ₹, or Max ₹ updates everywhere live!
+// 3. Admin Feature Switchboard: Turn Daily Bonus & Refer & Earn ON/OFF (auto-hides)
+// 4. Strict Global Verification Gate: When ON, NOTHING works until 1-Device verified
+// 5. Auto-Wipe Old Data: Switching bot token between Giveaway & Sell Bot wipes old data
+// 6. Live Force-Join Channel Gate (Public @username & Private -100... Channels)
+// 7. Real vs Fake Owner Approval -> Auto Credit Wallet | UPI Withdrawals + Refund
+// 8. Full Admin Panel: Pending Orders, Pending Withdraws, Promo Codes, Custom Welcome,
+//    Maintenance Mode, Add/Cut Balance, Ban/Unban, 2-Way Support & Broadcast
 // ============================================================================
 
 const PRIMARY_FIREBASE_URL = "https://kumarkorapp-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -18,6 +18,7 @@ const MIRROR_FIREBASE_URL = "https://kurmuryatelegrambot-default-rtdb.firebaseio
 const VERIFY_WEB_BASE = "https://verification-sigma-flax.vercel.app/";
 const VERIFY_API_BASE = "https://verification-sigma-flax.vercel.app/api/verify";
 const MASTER_ADMIN = "7335163273";
+const BOT_TYPE_TAG = "GIFT_CARD_SELL";
 
 const TG_EFFECTS = {
   FIRE: "5104841245755180586",
@@ -26,21 +27,8 @@ const TG_EFFECTS = {
   LIKE: "5107584321108051014"
 };
 
-const DEFAULT_CARD_RATES = {
-  "Google Play Store": 85,
-  "Amazon Pay": 90,
-  "Flipkart": 88,
-  "Zomato": 80,
-  "Swiggy": 80,
-  "Myntra": 82,
-  "BookMyShow": 78,
-  "Steam Wallet": 85,
-  "Free Fire / BGMI": 82,
-  "Other Gift Card": 75
-};
-
 // ============================================================================
-// 1. CORE FORMATTING & HELPERS
+// 1. CORE UTILITIES & FORMATTING
 // ============================================================================
 function escHtml(str) {
   return String(str || "")
@@ -82,13 +70,15 @@ function isBotOwner(b, uid) {
   return sUid === owner || sUid === MASTER_ADMIN;
 }
 
-function getCardRates(b) {
-  return { ...DEFAULT_CARD_RATES, ...(b.cardRates || {}) };
+function getCardList(b) {
+  if (!b || !b.cardList) return [];
+  if (Array.isArray(b.cardList)) return b.cardList.filter(Boolean);
+  if (typeof b.cardList === "object") return Object.values(b.cardList).filter(Boolean);
+  return [];
 }
 
 function calcPayoutAmount(faceValue, ratePct) {
-  const raw = (Number(faceValue) * Number(ratePct)) / 100;
-  return Number(raw.toFixed(2));
+  return Number(((Number(faceValue) * Number(ratePct)) / 100).toFixed(2));
 }
 
 // ============================================================================
@@ -104,7 +94,7 @@ function buildPrivateMiniAppVerifyKeyboard(userId, botUsername) {
   return {
     inline_keyboard: [
       [{ text: "🛡️ Open Device Verification Mini App", web_app: { url } }],
-      [{ text: "✅ I Have Verified — Check Status", callback_data: "VERIFY_CHECK_ME" }]
+      [{ text: "✅ I Have Verified — Unlock Bot", callback_data: "VERIFY_CHECK_ME" }]
     ]
   };
 }
@@ -153,7 +143,7 @@ async function checkUserDeviceVerification(userId, botUsername) {
 }
 
 // ============================================================================
-// 3. FIREBASE REALTIME DATABASE LAYER
+// 3. FIREBASE REALTIME DATABASE LAYER (100% SAFE KEYS)
 // ============================================================================
 async function fbRequest(baseUrl, path, method = "GET", data = null) {
   try {
@@ -187,6 +177,8 @@ async function savePlayerState(dbUrl, basePath, uid, pObj) {
 }
 
 async function saveBotConfig(dbUrl, basePath, cfg) {
+  // Always strip legacy cardRates with invalid slashes before saving!
+  if (cfg && cfg.cardRates) delete cfg.cardRates;
   await fbRequest(dbUrl, `${basePath}/botConfig`, "PUT", cfg);
 }
 
@@ -288,8 +280,8 @@ async function verifyForceJoinLive(token, b, uid) {
       uid,
       `⚠️ <b>MANDATORY CHANNEL JOIN REQUIRED</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `To sell Gift Cards & withdraw balance, you must stay joined in all official channels below!\n\n` +
-        `👇 <b>Join all channels & tap '✅ Joined / Verify Now':</b>`,
+        `Join all official channels below to unlock the bot!\n\n` +
+        `👇 <b>Join & tap '✅ Joined / Verify Now':</b>`,
       { inline_keyboard: ikb }
     );
     return false;
@@ -298,61 +290,67 @@ async function verifyForceJoinLive(token, b, uid) {
 }
 
 // ============================================================================
-// 6. KEYBOARD DECKS
+// 6. DYNAMIC KEYBOARD DECKS (AUTO-HIDES DISABLED FEATURES!)
 // ============================================================================
-function buildMainKeyboard(isOwner) {
+function buildMainKeyboard(b, isOwner) {
   const rows = [
     [{ text: "💳 Sell Gift Card" }, { text: "💰 My Balance" }],
     [{ text: "💸 Withdraw" }, { text: "📊 Live Card Rates" }],
-    [{ text: "📜 My Orders & History" }, { text: "🛡️ Verify Device" }],
-    [{ text: "🎁 Daily Bonus" }, { text: "👥 Refer & Earn" }],
-    [{ text: "🎟️ Redeem Code" }, { text: "🆘 Help / Support" }]
+    [{ text: "📜 My History" }, { text: "🎟️ Promo Code" }]
   ];
+
+  // Dynamically include Daily Bonus & Refer & Earn ONLY if Admin enabled them!
+  const bonusRow = [];
+  if (b.dailyEnabled !== false) bonusRow.push({ text: "🎁 Daily Bonus" });
+  if (b.referEnabled !== false) bonusRow.push({ text: "👥 Refer & Earn" });
+  if (bonusRow.length > 0) rows.push(bonusRow);
+
+  const bottomRow = [{ text: "🆘 Help / Support" }];
+  if (b.deviceVerifyEnabled !== false) {
+    bottomRow.unshift({ text: "🛡️ Verify Device" });
+  }
+  rows.push(bottomRow);
+
   if (isOwner) {
     rows.push([{ text: "👑 Admin Panel" }]);
   }
   return { keyboard: rows, resize_keyboard: true };
 }
 
-function buildSellCardsKeyboard(b) {
-  const rates = getCardRates(b);
-  return {
-    keyboard: [
-      [
-        { text: `🎮 Google Play Store (${rates["Google Play Store"]}%)` },
-        { text: `🛒 Amazon Pay (${rates["Amazon Pay"]}%)` }
-      ],
-      [
-        { text: `🛍️ Flipkart (${rates["Flipkart"]}%)` },
-        { text: `🍔 Zomato (${rates["Zomato"]}%)` }
-      ],
-      [
-        { text: `🍕 Swiggy (${rates["Swiggy"]}%)` },
-        { text: `👗 Myntra (${rates["Myntra"]}%)` }
-      ],
-      [
-        { text: `🎬 BookMyShow (${rates["BookMyShow"]}%)` },
-        { text: `🎮 Steam Wallet (${rates["Steam Wallet"]}%)` }
-      ],
-      [
-        { text: `🔥 Free Fire / BGMI (${rates["Free Fire / BGMI"]}%)` },
-        { text: `🎁 Other Gift Card (${rates["Other Gift Card"]}%)` }
-      ],
-      [{ text: "🔙 Back to Main Menu" }]
-    ],
-    resize_keyboard: true
-  };
+function buildDynamicSellCardsKeyboard(b) {
+  const list = getCardList(b);
+  const rows = [];
+  let currentRow = [];
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    currentRow.push({ text: `${i + 1}. ${c.name} (${c.rate}%)` });
+    if (currentRow.length === 2) {
+      rows.push(currentRow);
+      currentRow = [];
+    }
+  }
+  if (currentRow.length > 0) rows.push(currentRow);
+  rows.push([{ text: "🔙 Back to Main Menu" }]);
+  return { keyboard: rows, resize_keyboard: true };
 }
 
 function buildAdminKeyboard(b) {
   const vOn = b.deviceVerifyEnabled !== false;
+  const dOn = b.dailyEnabled !== false;
+  const rOn = b.referEnabled !== false;
+  const mOn = Boolean(b.maintenance);
+
   return {
     keyboard: [
-      [{ text: "📊 Edit Card Rates (%)" }, { text: "📋 Pending Sell Orders" }],
+      [{ text: "➕ Add New Card" }, { text: "✏️ Edit Card Rate/Min/Max" }],
+      [{ text: "🗑️ Remove Card" }, { text: "📋 All Cards List" }],
+      [{ text: "📥 Pending Sell Orders" }, { text: "💸 Pending Withdrawals" }],
+      [{ text: `🎁 Daily Bonus: ${dOn ? "ON 🟢" : "OFF 🔴"}` }, { text: `👥 Refer: ${rOn ? "ON 🟢" : "OFF 🔴"}` }],
+      [{ text: `🛡️ Device Verify: ${vOn ? "ON 🟢" : "OFF 🔴"}` }, { text: `🛠️ Maintenance: ${mOn ? "ON 🔴" : "OFF 🟢"}` }],
       [{ text: "📢 Add Public Channel" }, { text: "🔒 Add Private Channel" }],
-      [{ text: "🗑️ Remove Force Channel" }, { text: `🛡️ Device Verify: ${vOn ? "ON 🟢" : "OFF 🔴"}` }],
-      [{ text: "📉 Set Min/Max Withdraw" }, { text: "💰 Add / Cut User ₹" }],
-      [{ text: "🎁 Set Daily & Refer ₹" }, { text: "🎟️ Create Promo Code" }],
+      [{ text: "🗑️ Clear Force Channels" }, { text: "📉 Set Min/Max Withdraw" }],
+      [{ text: "💰 Add / Cut User ₹" }, { text: "🎁 Set Daily & Refer ₹" }],
+      [{ text: "🎟️ Create Promo Code" }, { text: "✏️ Set Welcome Text" }],
       [{ text: "🚫 Ban / Unban User" }, { text: "📢 Broadcast All" }],
       [{ text: "📈 Bot Statistics" }, { text: "🔙 Back to Main Menu" }]
     ],
@@ -367,7 +365,7 @@ function buildCancelKeyboard() {
 // ============================================================================
 // 7. PLAYER INITIALIZER
 // ============================================================================
-function getOrInitPlayer(players, b, uid, name, uname) {
+function getOrInitPlayer(players, uid, name, uname) {
   const sUid = String(uid);
   let p = players[sUid];
   if (!p) {
@@ -420,7 +418,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       endpoint: dynamicWebhookBase,
-      engine: "Kurmurya 24/7 Gift Card & Redeem Code Selling Bot (api/bot2.js)",
+      botType: BOT_TYPE_TAG,
+      engine: "Kurmurya 24/7 Dynamic Gift Card Exchange Bot (api/bot2.js)",
       status: "24/7_ONLINE"
     });
   }
@@ -429,7 +428,7 @@ export default async function handler(req, res) {
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 
   // --------------------------------------------------------------------------
-  // A. MAKER BOT CONNECT / DELETE API
+  // A. MAKER BOT CONNECT API (AUTO-WIPES OLD DATA IF SWITCHING BOT TYPE!)
   // --------------------------------------------------------------------------
   if (!botId && body.action === "connect_bot") {
     try {
@@ -439,17 +438,28 @@ export default async function handler(req, res) {
       if (!meRes || !meRes.ok) {
         return res.status(200).json({ success: false, error: "Invalid Bot Token!" });
       }
+
       const bId = String(meRes.result.id);
       const uname = meRes.result.username || "GiftCardBot";
-      const bName = meRes.result.first_name || "Gift Card Sell Bot";
+      const bName = meRes.result.first_name || "Gift Card Exchange Bot";
 
       const whUrl = `${dynamicWebhookBase}?botId=${encodeURIComponent(bId)}`;
-      await tgPost(token, "setWebhook", { url: whUrl, drop_pending_updates: false });
+      await tgPost(token, "setWebhook", { url: whUrl, drop_pending_updates: true });
 
-      const existing = (await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "GET")) || {};
+      const existing = await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "GET");
+      const isSwitchingType =
+        existing && existing.botConfig && existing.botConfig.botType !== BOT_TYPE_TAG;
+
+      // IF THIS BOT TOKEN WAS PREVIOUSLY USED FOR GIVEAWAY / CHANNEL BOT -> WIPE ALL OLD DATA!
+      if (isSwitchingType) {
+        await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "DELETE");
+        await fbRequest(MIRROR_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "DELETE");
+      }
+
+      const keepExisting = !isSwitchingType && existing && existing.botConfig;
       const cfg = {
-        ...(existing.botConfig || {}),
         id: bId,
+        botType: BOT_TYPE_TAG,
         token,
         username: uname,
         name: bName,
@@ -457,22 +467,26 @@ export default async function handler(req, res) {
         active: true,
         webhookActive: true,
         webhookUrl: whUrl,
-        deviceVerifyEnabled: true,
-        minWithdraw: 10,
-        maxWithdraw: 10000,
-        dailyBonus: 1,
-        referBonus: 2,
-        channels: (existing.botConfig && existing.botConfig.channels) || [],
-        cardRates: (existing.botConfig && existing.botConfig.cardRates) || DEFAULT_CARD_RATES
+        deviceVerifyEnabled: keepExisting ? existing.botConfig.deviceVerifyEnabled !== false : true,
+        dailyEnabled: keepExisting ? existing.botConfig.dailyEnabled !== false : true,
+        referEnabled: keepExisting ? existing.botConfig.referEnabled !== false : true,
+        maintenance: keepExisting ? Boolean(existing.botConfig.maintenance) : false,
+        minWithdraw: keepExisting ? numOrDef(existing.botConfig.minWithdraw, 10) : 10,
+        maxWithdraw: keepExisting ? numOrDef(existing.botConfig.maxWithdraw, 10000) : 10000,
+        dailyBonus: keepExisting ? numOrDef(existing.botConfig.dailyBonus, 1) : 1,
+        referBonus: keepExisting ? numOrDef(existing.botConfig.referBonus, 2) : 2,
+        welcomeText: keepExisting ? String(existing.botConfig.welcomeText || "") : "",
+        channels: keepExisting && Array.isArray(existing.botConfig.channels) ? existing.botConfig.channels : [],
+        // ZERO PRE-SET CARDS INITIALLY! Admin adds cards dynamically from Admin Panel!
+        cardList: keepExisting && Array.isArray(existing.botConfig.cardList) ? existing.botConfig.cardList : []
       };
 
       const nodeToSave = {
-        ...existing,
         botConfig: cfg,
-        playersMap: existing.playersMap || {},
-        sellOrders: existing.sellOrders || {},
-        withdrawals: existing.withdrawals || {},
-        giftCodes: existing.giftCodes || {}
+        playersMap: keepExisting && existing.playersMap ? existing.playersMap : {},
+        sellOrders: keepExisting && existing.sellOrders ? existing.sellOrders : {},
+        withdrawals: keepExisting && existing.withdrawals ? existing.withdrawals : {},
+        giftCodes: keepExisting && existing.giftCodes ? existing.giftCodes : {}
       };
 
       await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "PUT", nodeToSave);
@@ -481,14 +495,15 @@ export default async function handler(req, res) {
       await sendBotMsg(
         token,
         owner,
-        `💳 <b>YOUR 24/7 GIFT CARD SELLING BOT IS LIVE!</b>\n` +
+        `💳 <b>YOUR 24/7 GIFT CARD EXCHANGE BOT IS LIVE!</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `🏷️ <b>Bot Name:</b> ${escHtml(bName)}\n` +
           `🤖 <b>Username:</b> @${escHtml(uname)}\n` +
           `👑 <b>Owner ID:</b> <code>${owner}</code>\n` +
-          `🛡️ <b>Mini-App 1-Device Shield:</b> <code>ACTIVE ⚡</code>\n\n` +
-          `👇 Send <b>/start</b> to open your <b>👑 Admin Panel</b>!`,
-        buildMainKeyboard(true),
+          (isSwitchingType ? `🧹 <b>Old Bot Data Wiped Clean:</b> <code>YES ✅</code>\n` : "") +
+          `🛡️ <b>Strict Mini-App Verification:</b> <code>ON 🟢</code>\n\n` +
+          `👇 Send <b>/start</b> ➔ Open <b>👑 Admin Panel</b> ➔ Tap <b>➕ Add New Card</b> to add your Gift Cards, Rates (%) & Min/Max ₹!`,
+        buildMainKeyboard(cfg, true),
         TG_EFFECTS.PARTY
       );
 
@@ -554,17 +569,25 @@ export default async function handler(req, res) {
     const isOwner = isBotOwner(b, cUid);
     const isBrandNew = !players[cUid];
 
-    const p = getOrInitPlayer(players, b, cUid, cName, cUname);
-    const mainKb = buildMainKeyboard(isOwner);
+    const p = getOrInitPlayer(players, cUid, cName, cUname);
+    const mainKb = buildMainKeyboard(b, isOwner);
 
+    // 1. BAN CHECK
     if (p.banned && !isOwner) {
       if (isCb) await answerCb(token, upd.callback_query.id, "🚫 You are BANNED from this bot!", true);
-      else await sendBotMsg(token, cUid, "🚫 <b>ACCESS DENIED: Your account is banned.</b>");
+      else await sendBotMsg(token, cUid, "🚫 <b>ACCESS DENIED: Your account is permanently banned.</b>");
       return res.status(200).send("BANNED");
     }
 
+    // 2. MAINTENANCE CHECK
+    if (b.maintenance && !isOwner) {
+      if (isCb) await answerCb(token, upd.callback_query.id, "🛠️ Bot is under maintenance!", true);
+      else await sendBotMsg(token, cUid, "🛠️ <b>Bot is currently under maintenance. Please check back soon!</b>");
+      return res.status(200).send("MAINTENANCE");
+    }
+
     // ========================================================================
-    // C. INLINE BUTTON CALLBACKS (APPROVE/REJECT CARDS, WITHDRAWALS, VERIFY)
+    // C. INLINE BUTTON CALLBACKS
     // ========================================================================
     if (isCb) {
       const cbq = upd.callback_query;
@@ -576,7 +599,7 @@ export default async function handler(req, res) {
         const okJoin = await verifyForceJoinLive(token, b, cUid);
         if (okJoin) {
           await answerCb(token, cbId, "✅ Channel Join Verified!", true);
-          await sendBotMsg(token, cUid, `✅ <b>Verified! Welcome, ${escHtml(cName)}!</b>`, mainKb, TG_EFFECTS.PARTY);
+          await sendBotMsg(token, cUid, `✅ <b>Channel Verified!</b> Send /start to continue.`, mainKb, TG_EFFECTS.PARTY);
         } else {
           await answerCb(token, cbId, "❌ Please join all required channels first!", true);
         }
@@ -587,10 +610,15 @@ export default async function handler(req, res) {
         const vCheck = await checkUserDeviceVerification(cUid, botUsername);
         if (vCheck.banned) {
           p.banned = true;
+          p.verified = false;
           p.deviceId = vCheck.deviceId;
           await savePlayerState(dbUrl, basePath, cUid, p);
           await answerCb(token, cbId, "🚫 403 BANNED: Multiple accounts on same device!", true);
-          await sendBotMsg(token, cUid, `🚫 <b>DIRECT BANNED (403)</b>\nReason: <code>${escHtml(vCheck.reason)}</code>`);
+          await sendBotMsg(
+            token,
+            cUid,
+            `🚫 <b>DIRECT BANNED (403)</b>\nReason: <code>${escHtml(vCheck.reason)}</code>\nDevice: <code>${escHtml(vCheck.deviceId)}</code>`
+          );
           return res.status(200).send("OK");
         }
         if (vCheck.allowed && vCheck.verified) {
@@ -598,15 +626,21 @@ export default async function handler(req, res) {
           p.banned = false;
           p.deviceId = vCheck.deviceId;
           await savePlayerState(dbUrl, basePath, cUid, p);
-          await answerCb(token, cbId, `✅ Device Verified (${vCheck.deviceId})!`, true);
-          await sendBotMsg(token, cUid, `✅ <b>DEVICE VERIFIED (200 OK)!</b>\n📱 Device ID: <code>${escHtml(vCheck.deviceId)}</code>`, mainKb, TG_EFFECTS.PARTY);
+          await answerCb(token, cbId, `✅ Verified! Bot Unlocked!`, true);
+          await sendBotMsg(
+            token,
+            cUid,
+            `🎉 <b>DEVICE VERIFIED (200 OK)!</b>\n📱 Device ID: <code>${escHtml(vCheck.deviceId)}</code>\n\n✅ <b>All Bot Features are now unlocked below:</b>`,
+            mainKb,
+            TG_EFFECTS.PARTY
+          );
           return res.status(200).send("OK");
         }
-        await answerCb(token, cbId, "❌ Not verified yet! Open Mini App first.", true);
+        await answerCb(token, cbId, "❌ Not verified yet! Tap the Mini App button first.", true);
         return res.status(200).send("OK");
       }
 
-      // ---- OWNER APPROVE (REAL) OR REJECT (FAKE) GIFT CARD SELL ORDER ----
+      // ---- OWNER APPROVE (REAL) OR REJECT (FAKE) CARD ----
       if ((data.startsWith("SELL_REAL|") || data.startsWith("SELL_FAKE|")) && isOwner) {
         const isReal = data.startsWith("SELL_REAL|");
         const orderId = data.split("|")[1];
@@ -618,7 +652,7 @@ export default async function handler(req, res) {
         }
 
         const sellerId = String(ord.userId);
-        const sellerP = getOrInitPlayer(players, b, sellerId, ord.userName, ord.username);
+        const sellerP = getOrInitPlayer(players, sellerId, ord.userName, ord.username);
 
         if (isReal) {
           ord.status = "APPROVED";
@@ -638,7 +672,7 @@ export default async function handler(req, res) {
             cUid,
             msgId,
             `✅ <b>CARD APPROVED AS REAL (#${orderId})</b>\n` +
-              `💳 <b>Card:</b> ${escHtml(ord.cardType)} (₹${fmtRs(ord.faceValue)})\n` +
+              `💳 <b>Card:</b> ${escHtml(ord.cardType)} (₹${fmtRs(ord.faceValue)} @ ${ord.ratePct}%)\n` +
               `👤 <b>Seller:</b> ${escHtml(ord.userName)} (<code>${sellerId}</code>)\n` +
               `💰 <b>Credited to Wallet:</b> <code>+₹${fmtRs(payout)}</code>`
           );
@@ -651,14 +685,13 @@ export default async function handler(req, res) {
               `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
               `💳 <b>Card:</b> ${escHtml(ord.cardType)} (₹${fmtRs(ord.faceValue)})\n` +
               `💰 <b>Credited to Wallet:</b> <code>+₹${fmtRs(payout)}</code> ✅\n` +
-              `🏦 <b>New Balance:</b> <code>₹${fmtRs(sellerP.balance)}</code>\n\n` +
-              `👇 <i>Tap '💸 Withdraw' anytime to cash out to UPI!</i>`,
-            mainKb,
+              `🏦 <b>New Balance:</b> <code>₹${fmtRs(sellerP.balance)}</code>`,
+            buildMainKeyboard(b, false),
             TG_EFFECTS.PARTY
           );
         } else {
           ord.status = "REJECTED_FAKE";
-          addHistory(sellerP, `❌ Rejected ${ord.cardType} (#${orderId}): Fake / Already Used`);
+          addHistory(sellerP, `❌ Rejected ${ord.cardType} (#${orderId}): Fake / Used`);
           await fbRequest(dbUrl, `${basePath}/sellOrders/${orderId}`, "PUT", ord);
           await savePlayerState(dbUrl, basePath, sellerId, sellerP);
 
@@ -667,8 +700,7 @@ export default async function handler(req, res) {
             token,
             cUid,
             msgId,
-            `❌ <b>CARD REJECTED AS FAKE / USED (#${orderId})</b>\n` +
-              `💳 <b>Card:</b> ${escHtml(ord.cardType)} | 👤 <code>${sellerId}</code>`
+            `❌ <b>CARD REJECTED AS FAKE / USED (#${orderId})</b>\n💳 ${escHtml(ord.cardType)} | 👤 <code>${sellerId}</code>`
           );
 
           await sendBotMsg(
@@ -678,9 +710,8 @@ export default async function handler(req, res) {
               `━━━━━━━━━━━━━━━━━━━━\n` +
               `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
               `💳 <b>Card:</b> ${escHtml(ord.cardType)} (₹${fmtRs(ord.faceValue)})\n` +
-              `⚠️ <b>Reason:</b> Code was invalid, fake, or already redeemed.\n` +
-              `<i>Repeated fake submissions may result in a permanent ban.</i>`,
-            mainKb
+              `⚠️ <b>Reason:</b> Code was invalid, fake, or already redeemed.`,
+            buildMainKeyboard(b, false)
           );
         }
         return res.status(200).send("OK");
@@ -699,7 +730,7 @@ export default async function handler(req, res) {
 
         const tUid = String(wReq.userId);
         const amt = numOrDef(wReq.amount, 0);
-        const tp = getOrInitPlayer(players, b, tUid, wReq.userName, wReq.username);
+        const tp = getOrInitPlayer(players, tUid, wReq.userName, wReq.username);
 
         if (isOk) {
           wReq.status = "PAID";
@@ -710,7 +741,7 @@ export default async function handler(req, res) {
 
           await answerCb(token, cbId, "✅ Withdrawal Paid!", true);
           await editBotMsg(token, cUid, msgId, `✅ <b>UPI WITHDRAWAL PAID (#${wdId})</b>\n👤 <code>${tUid}</code> | ₹${fmtRs(amt)} ➔ <code>${escHtml(wReq.upiId)}</code>`);
-          await sendBotMsg(token, tUid, `🎉 <b>WITHDRAWAL PAID!</b>\n🆔 <code>${wdId}</code>\n💰 Amount: <code>₹${fmtRs(amt)}</code>\n🏦 UPI: <code>${escHtml(wReq.upiId)}</code>`, mainKb, TG_EFFECTS.PARTY);
+          await sendBotMsg(token, tUid, `🎉 <b>WITHDRAWAL PAID!</b>\n🆔 <code>${wdId}</code>\n💰 Amount: <code>₹${fmtRs(amt)}</code>\n🏦 UPI: <code>${escHtml(wReq.upiId)}</code>`, buildMainKeyboard(b, false), TG_EFFECTS.PARTY);
         } else {
           wReq.status = "REJECTED";
           tp.balance = Number((tp.balance + amt).toFixed(2));
@@ -720,7 +751,7 @@ export default async function handler(req, res) {
 
           await answerCb(token, cbId, "❌ Rejected & Refunded!", true);
           await editBotMsg(token, cUid, msgId, `❌ <b>WITHDRAWAL REJECTED & REFUNDED (#${wdId})</b>\n👤 <code>${tUid}</code> (+₹${fmtRs(amt)})`);
-          await sendBotMsg(token, tUid, `❌ <b>WITHDRAWAL REJECTED & REFUNDED</b>\n🔄 Refunded: <code>+₹${fmtRs(amt)}</code>\n💰 Balance: <code>₹${fmtRs(tp.balance)}</code>`, mainKb);
+          await sendBotMsg(token, tUid, `❌ <b>WITHDRAWAL REJECTED & REFUNDED</b>\n🔄 Refunded: <code>+₹${fmtRs(amt)}</code>\n💰 Balance: <code>₹${fmtRs(tp.balance)}</code>`, buildMainKeyboard(b, false));
         }
         return res.status(200).send("OK");
       }
@@ -747,10 +778,11 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // D. HANDLE TEXT MESSAGES
+    // D. HANDLE TEXT MESSAGES (STRICT GLOBAL FORCE-JOIN + STRICT VERIFICATION)
     // ========================================================================
     const text = String(upd.message.text || "").trim();
 
+    // Track referral on /start REF_<id>
     if (isBrandNew && text.startsWith("/start ")) {
       const parts = text.split(/\s+/);
       if (parts.length > 1 && parts[1].toUpperCase().startsWith("REF_")) {
@@ -759,25 +791,63 @@ export default async function handler(req, res) {
       }
     }
 
-    // Live Force-Join Check
+    // 1. LIVE FORCE-JOIN GATE
     const joinedOk = await verifyForceJoinLive(token, b, cUid);
     if (!joinedOk) {
       await savePlayerState(dbUrl, basePath, cUid, p);
       return res.status(200).send("FORCE_JOIN");
     }
 
-    // Credit Referral after Force-Join verified
-    if (p.referredBy && !p.refCredited) {
+    // 2. STRICT GLOBAL DEVICE VERIFICATION GATE!
+    //    When Device Verification is ON, NOTHING works for non-owners until Verified!
+    if (b.deviceVerifyEnabled !== false && !isOwner && !p.verified) {
+      const vCheck = await checkUserDeviceVerification(cUid, botUsername);
+      if (vCheck.banned) {
+        p.banned = true;
+        p.verified = false;
+        p.deviceId = vCheck.deviceId;
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(
+          token,
+          cUid,
+          `🚫 <b>DIRECT BANNED (403 BANNED)</b>\n━━━━━━━━━━━━━━━━━━━━\n⚠️ Reason: <code>${escHtml(vCheck.reason)}</code>\n📱 Device: <code>${escHtml(vCheck.deviceId)}</code>\n\n<i>Multiple accounts on the same device are blocked.</i>`
+        );
+        return res.status(200).send("BANNED_DEVICE");
+      }
+
+      if (vCheck.allowed && vCheck.verified) {
+        p.verified = true;
+        p.banned = false;
+        p.deviceId = vCheck.deviceId;
+        await savePlayerState(dbUrl, basePath, cUid, p);
+      } else {
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(
+          token,
+          cUid,
+          `🛡️ <b>MANDATORY 1-USER 1-DEVICE VERIFICATION</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🔒 To prevent fake accounts & scams, you MUST verify your device first before using any feature of <b>@${escHtml(botUsername)}</b>.\n\n` +
+            `📌 <b>Step 1:</b> Tap <b>🛡️ Open Device Verification Mini App</b> below.\n` +
+            `📌 <b>Step 2:</b> Tap <b>✅ I Have Verified — Unlock Bot</b>!`,
+          buildPrivateMiniAppVerifyKeyboard(cUid, botUsername)
+        );
+        return res.status(200).send("VERIFY_REQUIRED");
+      }
+    }
+
+    // Credit Referral after Force-Join & Verification passed!
+    if (p.referredBy && !p.refCredited && b.referEnabled !== false) {
       p.refCredited = true;
       const invId = String(p.referredBy);
       const refBon = numOrDef(b.referBonus, 2);
-      if (players[invId]) {
-        const invP = getOrInitPlayer(players, b, invId, "Inviter", "");
+      if (players[invId] && refBon > 0) {
+        const invP = getOrInitPlayer(players, invId, "Inviter", "");
         invP.balance = Number((invP.balance + refBon).toFixed(2));
         invP.referrals = numOrDef(invP.referrals, 0) + 1;
         addHistory(invP, `👥 Referral Bonus (${cName}): +₹${fmtRs(refBon)}`);
         await savePlayerState(dbUrl, basePath, invId, invP);
-        await sendBotMsg(token, invId, `🎉 <b>New Referral Verified!</b>\n👤 ${escHtml(cName)}\n💰 Bonus: <code>+₹${fmtRs(refBon)}</code>`);
+        await sendBotMsg(token, invId, `🎉 <b>New Verified Referral!</b>\n👤 ${escHtml(cName)}\n💰 Bonus: <code>+₹${fmtRs(refBon)}</code>`);
       }
     }
 
@@ -791,65 +861,58 @@ export default async function handler(req, res) {
     if (text === "🔙 Back to Main Menu" || text.startsWith("/start")) {
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
-      await sendBotMsg(
-        token,
-        cUid,
-        `💳 <b>WELCOME TO @${escHtml(botUsername.toUpperCase())} — GIFT CARD EXCHANGE!</b>\n` +
+      const customW = b.welcomeText
+        ? b.welcomeText
+            .replace(/\{name\}/gi, escHtml(cName))
+            .replace(/\{balance\}/gi, fmtRs(p.balance))
+            .replace(/\{userid\}/gi, cUid)
+        : `💳 <b>WELCOME TO @${escHtml(botUsername.toUpperCase())} — GIFT CARD EXCHANGE!</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `👤 <b>User:</b> ${escHtml(cName)} (<code>${cUid}</code>)\n` +
           `💰 <b>Wallet Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
-          `🛡️ <b>Device Status:</b> ${p.verified ? `✅ <b>VERIFIED (${escHtml(p.deviceId)})</b>` : "⏳ <b>Tap Verify Device</b>"}\n` +
+          `🛡️ <b>Device Status:</b> ${p.verified || isOwner ? `✅ <b>VERIFIED</b>` : "⏳ <b>Pending</b>"}\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `🔥 <b>Sell Play Store, Amazon, Flipkart, Zomato, Swiggy & more Gift Cards for instant UPI Cash!</b>\n\n` +
-          `👇 <b>Select an option below:</b>`,
-        mainKb,
-        TG_EFFECTS.PARTY
-      );
+          `👇 <b>Select an option below:</b>`;
+
+      await sendBotMsg(token, cUid, customW, mainKb, TG_EFFECTS.PARTY);
       return res.status(200).send("OK");
     }
 
     // ---- USER MENU BUTTONS ----
     if (text === "💳 Sell Gift Card") {
-      if (b.deviceVerifyEnabled !== false && !isOwner && !p.verified) {
-        const vCheck = await checkUserDeviceVerification(cUid, botUsername);
-        if (vCheck.banned) {
-          p.banned = true;
-          await savePlayerState(dbUrl, basePath, cUid, p);
-          await sendBotMsg(token, cUid, `🚫 <b>403 BANNED: Multiple accounts detected on this device!</b>`);
-          return res.status(200).send("OK");
-        }
-        if (!vCheck.verified) {
-          await sendBotMsg(
-            token,
-            cUid,
-            `🛡️ <b>DEVICE VERIFICATION REQUIRED BEFORE SELLING!</b>\nVerify your device inside the private Mini App below first:`,
-            buildPrivateMiniAppVerifyKeyboard(cUid, botUsername)
-          );
-          return res.status(200).send("OK");
-        }
-        p.verified = true;
-        p.deviceId = vCheck.deviceId;
+      const cards = getCardList(b);
+      if (cards.length === 0) {
+        await sendBotMsg(
+          token,
+          cUid,
+          isOwner
+            ? `📭 <b>No Gift Cards added yet!</b>\nOpen <b>👑 Admin Panel ➔ ➕ Add New Card</b> to add your first card.`
+            : `📭 <b>No Gift Cards are available for selling right now.</b> Please check back soon!`,
+          mainKb
+        );
+        return res.status(200).send("OK");
       }
-
       p.state = "WAIT_SELL_CARD_TYPE";
       await savePlayerState(dbUrl, basePath, cUid, p);
       await sendBotMsg(
         token,
         cUid,
-        `💳 <b>SELL GIFT CARD / REDEEM CODE (STEP 1 OF 3)</b>\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `👇 <b>Select which Gift Card you want to sell below:</b>`,
-        buildSellCardsKeyboard(b)
+        `💳 <b>SELL GIFT CARD / REDEEM CODE (STEP 1 OF 3)</b>\n━━━━━━━━━━━━━━━━━━━━\n👇 <b>Select a Gift Card below:</b>`,
+        buildDynamicSellCardsKeyboard(b)
       );
       return res.status(200).send("OK");
     }
 
     if (text === "📊 Live Card Rates") {
-      const rates = getCardRates(b);
-      let sb = `📊 <b>LIVE GIFT CARD BUYING RATES</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
-      for (const [card, pct] of Object.entries(rates)) {
-        sb += `• <b>${escHtml(card)}:</b> <code>${pct}%</code> (₹100 ➔ <b>₹${pct}</b>)\n`;
+      const cards = getCardList(b);
+      if (cards.length === 0) {
+        await sendBotMsg(token, cUid, `📭 <b>No Gift Cards configured yet!</b>`, mainKb);
+        return res.status(200).send("OK");
       }
+      let sb = `📊 <b>LIVE GIFT CARD BUYING RATES</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+      cards.forEach((c, idx) => {
+        sb += `${idx + 1}. <b>${escHtml(c.name)}</b> — <code>${c.rate}%</code>\n   ┗ Limits: <code>₹${fmtRs(c.min)} – ₹${fmtRs(c.max)}</code>\n`;
+      });
       sb += `\n👇 <i>Tap '💳 Sell Gift Card' to sell now!</i>`;
       await sendBotMsg(token, cUid, sb, mainKb);
       return res.status(200).send("OK");
@@ -863,12 +926,10 @@ export default async function handler(req, res) {
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `👤 <b>Name:</b> ${escHtml(cName)} (<code>${cUid}</code>)\n` +
           `💵 <b>Available Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
-          `💳 <b>Cards Sold:</b> <code>${numOrDef(p.cardsSoldCount, 0)}</code> (Total Value: ₹${fmtRs(p.totalSoldRs)})\n` +
+          `💳 <b>Cards Sold:</b> <code>${numOrDef(p.cardsSoldCount, 0)}</code> (Total: ₹${fmtRs(p.totalSoldRs)})\n` +
           `📤 <b>Total Withdrawn:</b> <code>₹${fmtRs(p.totalWithdrawn)}</code>\n` +
           `🏦 <b>Saved UPI ID:</b> <code>${escHtml(p.upiId || "Not Set")}</code>`,
-        {
-          inline_keyboard: [[{ text: "🏦 Set / Change UPI ID", callback_data: "SET_UPI_NOW" }]]
-        }
+        { inline_keyboard: [[{ text: "🏦 Set / Change UPI ID", callback_data: "SET_UPI_NOW" }]] }
       );
       return res.status(200).send("OK");
     }
@@ -887,9 +948,9 @@ export default async function handler(req, res) {
         cUid,
         `💸 <b>WITHDRAW TO UPI (<code>${escHtml(p.upiId)}</code>)</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `💰 <b>Your Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
+          `💰 <b>Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n` +
           `📉 <b>Min:</b> <code>₹${fmtRs(numOrDef(b.minWithdraw, 10))}</code> | 📈 <b>Max:</b> <code>₹${fmtRs(numOrDef(b.maxWithdraw, 10000))}</code>\n\n` +
-          `👇 <b>Enter the ₹ amount you want to withdraw:</b>`,
+          `👇 <b>Enter ₹ amount to withdraw:</b>`,
         buildCancelKeyboard()
       );
       return res.status(200).send("OK");
@@ -899,13 +960,15 @@ export default async function handler(req, res) {
       await sendBotMsg(
         token,
         cUid,
-        `🛡️ <b>1-USER 1-DEVICE MINI-APP VERIFICATION</b>\nTap below to verify your device securely inside the Mini App:`,
-        buildPrivateMiniAppVerifyKeyboard(cUid, botUsername)
+        p.verified
+          ? `✅ <b>Your Device is Already Verified!</b>\n📱 Device ID: <code>${escHtml(p.deviceId)}</code>`
+          : `🛡️ <b>Verify your device inside the private Mini App below:</b>`,
+        p.verified ? mainKb : buildPrivateMiniAppVerifyKeyboard(cUid, botUsername)
       );
       return res.status(200).send("OK");
     }
 
-    if (text === "📜 My Orders & History") {
+    if (text === "📜 My History") {
       const h = Array.isArray(p.history) ? p.history : [];
       let sb = `📜 <b>MY ORDERS & WALLET HISTORY</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
       if (h.length === 0) sb += `<i>No records yet.</i>`;
@@ -915,10 +978,13 @@ export default async function handler(req, res) {
     }
 
     if (text === "🎁 Daily Bonus") {
+      if (b.dailyEnabled === false) {
+        await sendBotMsg(token, cUid, `⚠️ <b>Daily Bonus is currently turned OFF by Admin.</b>`, mainKb);
+        return res.status(200).send("OK");
+      }
       const now = Date.now();
-      const dayMs = 24 * 60 * 60 * 1000;
-      if (now - numOrDef(p.lastDaily, 0) < dayMs) {
-        await sendBotMsg(token, cUid, `⏳ <b>Daily Bonus already claimed today! Come back tomorrow.</b>`, mainKb);
+      if (now - numOrDef(p.lastDaily, 0) < 24 * 60 * 60 * 1000) {
+        await sendBotMsg(token, cUid, `⏳ <b>Daily Bonus already claimed today!</b>`, mainKb);
         return res.status(200).send("OK");
       }
       const dBon = numOrDef(b.dailyBonus, 1);
@@ -931,6 +997,10 @@ export default async function handler(req, res) {
     }
 
     if (text === "👥 Refer & Earn") {
+      if (b.referEnabled === false) {
+        await sendBotMsg(token, cUid, `⚠️ <b>Refer & Earn is currently turned OFF by Admin.</b>`, mainKb);
+        return res.status(200).send("OK");
+      }
       const link = `https://t.me/${botUsername}?start=REF_${cUid}`;
       await sendBotMsg(
         token,
@@ -941,7 +1011,7 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    if (text === "🎟️ Redeem Code") {
+    if (text === "🎟️ Promo Code") {
       p.state = "WAIT_PROMO_CODE";
       await savePlayerState(dbUrl, basePath, cUid, p);
       await sendBotMsg(token, cUid, `🎟️ <b>Send your Promo / Gift Code below:</b>`, buildCancelKeyboard());
@@ -955,52 +1025,164 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // ---- OWNER ADMIN PANEL BUTTONS ----
+    // ========================================================================
+    // E. FULL OWNER ADMIN PANEL BUTTONS
+    // ========================================================================
     if (isOwner) {
       if (text === "👑 Admin Panel" || text === "/admin") {
         p.state = "IDLE";
         await savePlayerState(dbUrl, basePath, cUid, p);
+        const cards = getCardList(b);
         const pendSells = Object.values(sellOrders).filter((o) => o && o.status === "PENDING").length;
+        const pendWds = Object.values(withdrawals).filter((w) => w && w.status === "PENDING").length;
+
         await sendBotMsg(
           token,
           cUid,
-          `👑 <b>GIFT CARD BOT ADMIN PANEL</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-            `👥 <b>Users:</b> <code>${Object.keys(players).length}</code>\n` +
-            `⏳ <b>Pending Card Checks:</b> <code>${pendSells}</code>\n` +
-            `📢 <b>Force Channels:</b> <code>${(b.channels || []).length}</code>`,
+          `👑 <b>GIFT CARD BOT MASTER ADMIN PANEL</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `💳 <b>Active Cards:</b> <code>${cards.length}</code>\n` +
+            `📥 <b>Pending Card Checks:</b> <code>${pendSells}</code> | 💸 <b>Pending Withdraws:</b> <code>${pendWds}</code>\n` +
+            `👥 <b>Users:</b> <code>${Object.keys(players).length}</code> | 📢 <b>Force Channels:</b> <code>${(b.channels || []).length}</code>\n` +
+            `🛡️ <b>Strict Verify:</b> ${b.deviceVerifyEnabled !== false ? "🟢 ON" : "🔴 OFF"} | 🎁 <b>Daily:</b> ${b.dailyEnabled !== false ? "🟢 ON" : "🔴 OFF"} | 👥 <b>Refer:</b> ${b.referEnabled !== false ? "🟢 ON" : "🔴 OFF"}`,
           buildAdminKeyboard(b),
           TG_EFFECTS.FIRE
         );
         return res.status(200).send("OK");
       }
 
-      if (text === "📊 Edit Card Rates (%)") {
-        p.state = "ADM_EDIT_RATE";
+      // ---- DYNAMIC CARD MANAGEMENT ----
+      if (text === "➕ Add New Card") {
+        p.state = "ADM_ADD_CARD_NAME";
         await savePlayerState(dbUrl, basePath, cUid, p);
-        const rates = getCardRates(b);
-        let rTxt = `📊 <b>EDIT CARD PAYOUT RATE (%)</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
-        Object.keys(rates).forEach((k, i) => { rTxt += `${i + 1}. <b>${k}</b>: <code>${rates[k]}%</code>\n`; });
-        rTxt += `\n👇 <b>Send <code>CARD_NUMBER NEW_PERCENT</code> (e.g. <code>1 90</code> for Google Play 90%):</b>`;
+        await sendBotMsg(
+          token,
+          cUid,
+          `➕ <b>ADD NEW GIFT CARD (STEP 1 OF 3)</b>\n👇 <b>Send the Card Name:</b>\n• Example: <code>Google Play Store</code> or <code>Amazon Pay</code>`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (text === "✏️ Edit Card Rate/Min/Max") {
+        const cards = getCardList(b);
+        if (cards.length === 0) {
+          await sendBotMsg(token, cUid, `📭 <b>No cards added yet! Tap '➕ Add New Card' first.</b>`, buildAdminKeyboard(b));
+          return res.status(200).send("OK");
+        }
+        p.state = "ADM_EDIT_CARD";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        let cTxt = `✏️ <b>EDIT CARD RATE (%), MIN ₹ & MAX ₹</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+        cards.forEach((c, i) => {
+          cTxt += `<b>${i + 1}. ${escHtml(c.name)}</b> — <code>${c.rate}%</code> (Min ₹${fmtRs(c.min)} | Max ₹${fmtRs(c.max)})\n`;
+        });
+        cTxt += `\n👇 <b>Send <code>CARD_NO RATE%</code> OR <code>CARD_NO RATE% MIN MAX</code>:</b>\n• Example: <code>1 70</code> (changes rate to 70%)\n• Example: <code>1 70 10 5000</code> (changes rate, min & max!)`;
+        await sendBotMsg(token, cUid, cTxt, buildCancelKeyboard());
+        return res.status(200).send("OK");
+      }
+
+      if (text === "🗑️ Remove Card") {
+        const cards = getCardList(b);
+        if (cards.length === 0) {
+          await sendBotMsg(token, cUid, `📭 <b>No cards to remove!</b>`, buildAdminKeyboard(b));
+          return res.status(200).send("OK");
+        }
+        p.state = "ADM_REM_CARD";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        let rTxt = `🗑️ <b>SEND CARD NUMBER TO REMOVE:</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+        cards.forEach((c, i) => { rTxt += `${i + 1}. <b>${escHtml(c.name)}</b> (${c.rate}%)\n`; });
         await sendBotMsg(token, cUid, rTxt, buildCancelKeyboard());
         return res.status(200).send("OK");
       }
 
-      if (text === "📋 Pending Sell Orders") {
-        const pend = Object.values(sellOrders).filter((o) => o && o.status === "PENDING");
-        if (pend.length === 0) {
-          await sendBotMsg(token, cUid, `✅ <b>No pending Gift Card submissions!</b>`, buildAdminKeyboard(b));
+      if (text === "📋 All Cards List") {
+        const cards = getCardList(b);
+        if (cards.length === 0) {
+          await sendBotMsg(token, cUid, `📭 <b>No cards added yet!</b>`, buildAdminKeyboard(b));
           return res.status(200).send("OK");
         }
-        for (const o of pend.slice(0, 5)) {
+        let sb = `📋 <b>CONFIGURED GIFT CARDS (${cards.length})</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+        cards.forEach((c, i) => {
+          sb += `${i + 1}. <b>${escHtml(c.name)}</b> — <code>${c.rate}%</code> | Min: <code>₹${fmtRs(c.min)}</code> | Max: <code>₹${fmtRs(c.max)}</code>\n`;
+        });
+        await sendBotMsg(token, cUid, sb, buildAdminKeyboard(b));
+        return res.status(200).send("OK");
+      }
+
+      // ---- FEATURE SWITCHBOARD TOGGLES ----
+      if (text.startsWith("🎁 Daily Bonus:")) {
+        b.dailyEnabled = b.dailyEnabled === false ? true : false;
+        await saveBotConfig(dbUrl, basePath, b);
+        await sendBotMsg(token, cUid, `🎁 <b>Daily Bonus is now:</b> ${b.dailyEnabled ? "🟢 ON (Visible)" : "🔴 OFF (Hidden from Menu)"}`, buildAdminKeyboard(b));
+        return res.status(200).send("OK");
+      }
+
+      if (text.startsWith("👥 Refer:")) {
+        b.referEnabled = b.referEnabled === false ? true : false;
+        await saveBotConfig(dbUrl, basePath, b);
+        await sendBotMsg(token, cUid, `👥 <b>Refer & Earn is now:</b> ${b.referEnabled ? "🟢 ON (Visible)" : "🔴 OFF (Hidden from Menu)"}`, buildAdminKeyboard(b));
+        return res.status(200).send("OK");
+      }
+
+      if (text.startsWith("🛡️ Device Verify:")) {
+        b.deviceVerifyEnabled = b.deviceVerifyEnabled === false ? true : false;
+        await saveBotConfig(dbUrl, basePath, b);
+        await sendBotMsg(
+          token,
+          cUid,
+          `🛡️ <b>Strict Device Verification Gate is now:</b> ${b.deviceVerifyEnabled ? "🟢 ON (Users must verify first!)" : "🔴 OFF"}`,
+          buildAdminKeyboard(b)
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (text.startsWith("🛠️ Maintenance:")) {
+        b.maintenance = !b.maintenance;
+        await saveBotConfig(dbUrl, basePath, b);
+        await sendBotMsg(token, cUid, `🛠️ <b>Maintenance Mode:</b> ${b.maintenance ? "🔴 ON" : "🟢 OFF"}`, buildAdminKeyboard(b));
+        return res.status(200).send("OK");
+      }
+
+      if (text === "📥 Pending Sell Orders") {
+        const pend = Object.values(sellOrders).filter((o) => o && o.status === "PENDING");
+        if (pend.length === 0) {
+          await sendBotMsg(token, cUid, `✅ <b>No pending Gift Card orders!</b>`, buildAdminKeyboard(b));
+          return res.status(200).send("OK");
+        }
+        for (const o of pend.slice(0, 6)) {
           await sendBotMsg(
             token,
             cUid,
-            `💳 <b>PENDING CARD (#${o.id})</b>\nCard: <b>${escHtml(o.cardType)}</b>\nValue: <code>₹${fmtRs(o.faceValue)}</code> ➔ Payout: <code>₹${fmtRs(o.payoutAmount)}</code>\n🔑 Code: <code>${escHtml(o.redeemCode)}</code>\n👤 Seller: ${escHtml(o.userName)} (<code>${o.userId}</code>)`,
+            `💳 <b>PENDING CARD (#${o.id})</b>\nCard: <b>${escHtml(o.cardType)}</b>\nValue: <code>₹${fmtRs(o.faceValue)}</code> (${o.ratePct}%) ➔ Payout: <code>₹${fmtRs(o.payoutAmount)}</code>\n🔑 Code: <code>${escHtml(o.redeemCode)}</code>\n👤 Seller: ${escHtml(o.userName)} (<code>${o.userId}</code>)`,
             {
               inline_keyboard: [
                 [
                   { text: `✅ Real (+₹${fmtRs(o.payoutAmount)})`, callback_data: `SELL_REAL|${o.id}` },
                   { text: "❌ Fake / Used", callback_data: `SELL_FAKE|${o.id}` }
+                ]
+              ]
+            }
+          );
+        }
+        return res.status(200).send("OK");
+      }
+
+      if (text === "💸 Pending Withdrawals") {
+        const pendW = Object.values(withdrawals).filter((w) => w && w.status === "PENDING");
+        if (pendW.length === 0) {
+          await sendBotMsg(token, cUid, `✅ <b>No pending UPI withdrawals!</b>`, buildAdminKeyboard(b));
+          return res.status(200).send("OK");
+        }
+        for (const w of pendW.slice(0, 6)) {
+          await sendBotMsg(
+            token,
+            cUid,
+            `💸 <b>PENDING WITHDRAWAL (#${w.id})</b>\n👤 ${escHtml(w.userName)} (<code>${w.userId}</code>)\n💰 Amount: <code>₹${fmtRs(w.amount)}</code>\n🏦 UPI: <code>${escHtml(w.upiId)}</code>`,
+            {
+              inline_keyboard: [
+                [
+                  { text: `✅ Mark Paid (₹${fmtRs(w.amount)})`, callback_data: `WD_OK|${w.id}` },
+                  { text: "❌ Reject & Refund", callback_data: `WD_NO|${w.id}` }
                 ]
               ]
             }
@@ -1023,17 +1205,10 @@ export default async function handler(req, res) {
         return res.status(200).send("OK");
       }
 
-      if (text === "🗑️ Remove Force Channel") {
+      if (text === "🗑️ Clear Force Channels") {
         b.channels = [];
         await saveBotConfig(dbUrl, basePath, b);
         await sendBotMsg(token, cUid, `🗑️ <b>All Force-Join Channels Cleared!</b>`, buildAdminKeyboard(b));
-        return res.status(200).send("OK");
-      }
-
-      if (text.startsWith("🛡️ Device Verify:")) {
-        b.deviceVerifyEnabled = b.deviceVerifyEnabled === false ? true : false;
-        await saveBotConfig(dbUrl, basePath, b);
-        await sendBotMsg(token, cUid, `🛡️ <b>Device Verification is now:</b> ${b.deviceVerifyEnabled ? "🟢 ON" : "🔴 OFF"}`, buildAdminKeyboard(b));
         return res.status(200).send("OK");
       }
 
@@ -1061,7 +1236,14 @@ export default async function handler(req, res) {
       if (text === "🎟️ Create Promo Code") {
         p.state = "ADM_MAKE_PROMO";
         await savePlayerState(dbUrl, basePath, cUid, p);
-        await sendBotMsg(token, cUid, `🎟️ <b>Send <code>CODE AMOUNT_RS MAX_USES</code> (e.g. <code>BONUS10 10 20</code>):</b>`, buildCancelKeyboard());
+        await sendBotMsg(token, cUid, `🎟️ <b>Send <code>CODE AMOUNT_RS MAX_USES</code> (e.g. <code>WIN10 10 20</code>):</b>`, buildCancelKeyboard());
+        return res.status(200).send("OK");
+      }
+
+      if (text === "✏️ Set Welcome Text") {
+        p.state = "ADM_SET_WELCOME";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(token, cUid, `✏️ <b>Send custom Welcome HTML text</b> (supports <code>{name}</code>, <code>{balance}</code>, <code>{userid}</code>) or send <code>RESET</code>:`, buildCancelKeyboard());
         return res.status(200).send("OK");
       }
 
@@ -1075,7 +1257,7 @@ export default async function handler(req, res) {
       if (text === "📢 Broadcast All") {
         p.state = "ADM_BCAST";
         await savePlayerState(dbUrl, basePath, cUid, p);
-        await sendBotMsg(token, cUid, `📢 <b>Send Broadcast Message:</b>`, buildCancelKeyboard());
+        await sendBotMsg(token, cUid, `📢 <b>Send Broadcast Message for all ${Object.keys(players).length} users:</b>`, buildCancelKeyboard());
         return res.status(200).send("OK");
       }
 
@@ -1083,7 +1265,7 @@ export default async function handler(req, res) {
         await sendBotMsg(
           token,
           cUid,
-          `📈 <b>BOT STATISTICS</b>\n👥 Users: <code>${Object.keys(players).length}</code>\n💳 Total Sell Orders: <code>${Object.keys(sellOrders).length}</code>\n💸 Total Withdrawals: <code>${Object.keys(withdrawals).length}</code>`,
+          `📈 <b>BOT STATISTICS</b>\n👥 Users: <code>${Object.keys(players).length}</code>\n💳 Cards Configured: <code>${getCardList(b).length}</code>\n📥 Sell Orders: <code>${Object.keys(sellOrders).length}</code>\n💸 Withdrawals: <code>${Object.keys(withdrawals).length}</code>`,
           buildAdminKeyboard(b)
         );
         return res.status(200).send("OK");
@@ -1091,27 +1273,36 @@ export default async function handler(req, res) {
     }
 
     // ========================================================================
-    // E. MULTI-STEP WORKFLOWS (SELL GIFT CARD, WITHDRAW, SUPPORT & ADMIN)
+    // F. MULTI-STEP WORKFLOWS (DYNAMIC SELL CARD + ADMIN CARD BUILDER)
     // ========================================================================
     const st = String(p.state || "IDLE").toUpperCase();
 
-    // ---- SELL GIFT CARD FLOW (3 STEPS: CARD TYPE -> VALUE ₹ -> REDEEM CODE) ----
+    // ---- USER SELL FLOW (READS LIVE RATE, MIN & MAX FROM b.cardList!) ----
     if (st === "WAIT_SELL_CARD_TYPE") {
-      const rates = getCardRates(b);
-      let matchedCard = "";
-      for (const cardName of Object.keys(rates)) {
-        if (text.toLowerCase().includes(cardName.toLowerCase())) {
-          matchedCard = cardName;
-          break;
+      const cards = getCardList(b);
+      let chosenCard = null;
+
+      const numM = text.match(/^(\d+)\./);
+      if (numM) {
+        const idx = parseInt(numM[1], 10) - 1;
+        if (idx >= 0 && idx < cards.length) chosenCard = cards[idx];
+      }
+      if (!chosenCard) {
+        for (const c of cards) {
+          if (text.toLowerCase().includes(c.name.toLowerCase())) {
+            chosenCard = c;
+            break;
+          }
         }
       }
-      if (!matchedCard) {
-        await sendBotMsg(token, cUid, `⚠️ Please select a Gift Card from the buttons below:`, buildSellCardsKeyboard(b));
+
+      if (!chosenCard) {
+        await sendBotMsg(token, cUid, `⚠️ Please select a Gift Card from the buttons below:`, buildDynamicSellCardsKeyboard(b));
         return res.status(200).send("OK");
       }
 
-      p.tempSellCard = matchedCard;
-      p.tempSellRate = rates[matchedCard];
+      p.tempSellCardId = chosenCard.id;
+      p.tempSellCardName = chosenCard.name;
       p.state = "WAIT_SELL_VALUE";
       await savePlayerState(dbUrl, basePath, cUid, p);
 
@@ -1120,22 +1311,43 @@ export default async function handler(req, res) {
         cUid,
         `💰 <b>STEP 2 OF 3: ENTER CARD VALUE (₹)</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `💳 <b>Selected Card:</b> ${escHtml(matchedCard)}\n` +
-          `📊 <b>Live Buying Rate:</b> <code>${rates[matchedCard]}%</code>\n\n` +
-          `👇 <b>Send the Gift Card Amount in ₹ (e.g. <code>100</code>, <code>500</code>):</b>`,
+          `💳 <b>Selected Card:</b> ${escHtml(chosenCard.name)}\n` +
+          `📊 <b>Live Buying Rate:</b> <code>${chosenCard.rate}%</code>\n` +
+          `📉 <b>Min Amount:</b> <code>₹${fmtRs(chosenCard.min)}</code> | 📈 <b>Max:</b> <code>₹${fmtRs(chosenCard.max)}</code>\n\n` +
+          `👇 <b>Send the Gift Card Amount in ₹:</b>`,
         buildCancelKeyboard()
       );
       return res.status(200).send("OK");
     }
 
     if (st === "WAIT_SELL_VALUE") {
-      const val = parseFloat(text);
-      if (isNaN(val) || val < 10) {
-        await sendBotMsg(token, cUid, `⚠️ Enter a valid card amount (Min ₹10):`, buildCancelKeyboard());
+      // Always fetch LATEST live card rate/min/max from b.cardList!
+      const cards = getCardList(b);
+      const liveCard =
+        cards.find((c) => c.id === p.tempSellCardId || c.name === p.tempSellCardName) || null;
+      if (!liveCard) {
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(token, cUid, `⚠️ This card is no longer available.`, mainKb);
         return res.status(200).send("OK");
       }
-      const payout = calcPayoutAmount(val, p.tempSellRate || 80);
+
+      const val = parseFloat(text);
+      const minV = numOrDef(liveCard.min, 10);
+      const maxV = numOrDef(liveCard.max, 10000);
+      if (isNaN(val) || val < minV || val > maxV) {
+        await sendBotMsg(
+          token,
+          cUid,
+          `⚠️ <b>Invalid Amount!</b>\nAllowed for <b>${escHtml(liveCard.name)}</b>: <code>₹${fmtRs(minV)} – ₹${fmtRs(maxV)}</code>`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      const payout = calcPayoutAmount(val, liveCard.rate);
       p.tempSellValue = val;
+      p.tempSellRate = liveCard.rate;
       p.tempSellPayout = payout;
       p.state = "WAIT_SELL_CODE";
       await savePlayerState(dbUrl, basePath, cUid, p);
@@ -1145,17 +1357,17 @@ export default async function handler(req, res) {
         cUid,
         `🔑 <b>STEP 3 OF 3: SEND REDEEM CODE</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `💳 <b>Card:</b> ${escHtml(p.tempSellCard)}\n` +
+          `💳 <b>Card:</b> ${escHtml(liveCard.name)}\n` +
           `🏷️ <b>Face Value:</b> <code>₹${fmtRs(val)}</code>\n` +
-          `💰 <b>You Will Receive:</b> <code>₹${fmtRs(payout)}</code> (${p.tempSellRate}%)\n\n` +
-          `👇 <b>Paste your exact Redeem Code / Gift Voucher Code below:</b>`,
+          `💰 <b>You Will Receive:</b> <code>₹${fmtRs(payout)}</code> (${liveCard.rate}%)\n\n` +
+          `👇 <b>Paste your exact Redeem Code / Voucher below:</b>`,
         buildCancelKeyboard()
       );
       return res.status(200).send("OK");
     }
 
     if (st === "WAIT_SELL_CODE") {
-      if (text.length < 6) {
+      if (text.length < 5) {
         await sendBotMsg(token, cUid, `⚠️ Code looks too short! Paste your exact Redeem Code:`, buildCancelKeyboard());
         return res.status(200).send("OK");
       }
@@ -1165,7 +1377,7 @@ export default async function handler(req, res) {
         userId: cUid,
         userName: cName,
         username: cUname,
-        cardType: p.tempSellCard || "Gift Card",
+        cardType: p.tempSellCardName || "Gift Card",
         faceValue: numOrDef(p.tempSellValue, 10),
         ratePct: numOrDef(p.tempSellRate, 80),
         payoutAmount: numOrDef(p.tempSellPayout, 8),
@@ -1186,24 +1398,22 @@ export default async function handler(req, res) {
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
           `💳 <b>Card:</b> ${escHtml(ordObj.cardType)} (₹${fmtRs(ordObj.faceValue)})\n` +
-          `💰 <b>Expected Payout:</b> <code>₹${fmtRs(ordObj.payoutAmount)}</code>\n\n` +
-          `⏳ <i>Owner is checking if the code is Real or Fake. Once approved, ₹${fmtRs(ordObj.payoutAmount)} will be credited to your Wallet instantly!</i>`,
+          `💰 <b>Expected Payout:</b> <code>₹${fmtRs(ordObj.payoutAmount)}</code> (${ordObj.ratePct}%)\n\n` +
+          `⏳ <i>Owner is verifying Real vs Fake. Once approved, ₹${fmtRs(ordObj.payoutAmount)} will credit to your Wallet instantly!</i>`,
         mainKb
       );
 
-      // Alert Owner with Real/Fake Approve & Reject Buttons!
       await sendBotMsg(
         token,
         ownerId,
-        `🔔 <b>NEW GIFT CARD SELL SUBMISSION!</b>\n` +
+        `🔔 <b>NEW GIFT CARD SUBMISSION!</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
           `👤 <b>Seller:</b> ${escHtml(cName)} (${cUname ? "@" + escHtml(cUname) : "None"} | <code>${cUid}</code>)\n` +
-          `💳 <b>Card Type:</b> <b>${escHtml(ordObj.cardType)}</b>\n` +
-          `🏷️ <b>Face Value:</b> <code>₹${fmtRs(ordObj.faceValue)}</code> (${ordObj.ratePct}%)\n` +
-          `💰 <b>Payout to Credit:</b> <code>₹${fmtRs(ordObj.payoutAmount)}</code>\n` +
-          `🔑 <b>Redeem Code:</b> <code>${escHtml(ordObj.redeemCode)}</code>\n\n` +
-          `👇 <b>Check if Real or Fake & tap below:</b>`,
+          `💳 <b>Card:</b> <b>${escHtml(ordObj.cardType)}</b>\n` +
+          `🏷️ <b>Value:</b> <code>₹${fmtRs(ordObj.faceValue)}</code> @ <code>${ordObj.ratePct}%</code>\n` +
+          `💰 <b>Payout:</b> <code>₹${fmtRs(ordObj.payoutAmount)}</code>\n` +
+          `🔑 <b>Code:</b> <code>${escHtml(ordObj.redeemCode)}</code>`,
         {
           inline_keyboard: [
             [
@@ -1217,7 +1427,7 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // ---- USER UPI & WITHDRAWAL ----
+    // ---- USER UPI, WITHDRAW, PROMO & SUPPORT ----
     if (st === "WAIT_USER_UPI") {
       if (!text.includes("@")) {
         await sendBotMsg(token, cUid, `⚠️ Invalid UPI ID! Example: <code>name@ybl</code>:`, buildCancelKeyboard());
@@ -1255,11 +1465,11 @@ export default async function handler(req, res) {
       await savePlayerState(dbUrl, basePath, cUid, p);
       await fbRequest(dbUrl, `${basePath}/withdrawals/${wdId}`, "PUT", wObj);
 
-      await sendBotMsg(token, cUid, `✅ <b>WITHDRAWAL REQUEST SUBMITTED (#${wdId})!</b>\n💰 Amount: <code>₹${fmtRs(amt)}</code>\n🏦 UPI: <code>${escHtml(p.upiId)}</code>`, mainKb);
+      await sendBotMsg(token, cUid, `✅ <b>WITHDRAWAL SUBMITTED (#${wdId})!</b>\n💰 Amount: <code>₹${fmtRs(amt)}</code>\n🏦 UPI: <code>${escHtml(p.upiId)}</code>`, mainKb);
       await sendBotMsg(
         token,
         ownerId,
-        `💸 <b>NEW UPI WITHDRAWAL REQUEST</b>\n🆔 <code>${wdId}</code>\n👤 ${escHtml(cName)} (<code>${cUid}</code>)\n💰 Amount: <code>₹${fmtRs(amt)}</code>\n🏦 UPI: <code>${escHtml(p.upiId)}</code>`,
+        `💸 <b>NEW UPI WITHDRAWAL</b>\n🆔 <code>${wdId}</code>\n👤 ${escHtml(cName)} (<code>${cUid}</code>)\n💰 Amount: <code>₹${fmtRs(amt)}</code>\n🏦 UPI: <code>${escHtml(p.upiId)}</code>`,
         {
           inline_keyboard: [
             [
@@ -1313,6 +1523,120 @@ export default async function handler(req, res) {
 
     // ---- OWNER ADMIN MULTI-STEP HANDLERS ----
     if (isOwner) {
+      // ADD NEW CARD (3 STEPS: Name -> Rate % -> Min Max ₹)
+      if (st === "ADM_ADD_CARD_NAME") {
+        p.tmpNewCardName = text.trim();
+        p.state = "ADM_ADD_CARD_RATE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(
+          token,
+          cUid,
+          `📊 <b>STEP 2 OF 3: ENTER BUYING RATE (%) FOR ${escHtml(p.tmpNewCardName)}</b>\n👇 <b>Send percentage (e.g. <code>85</code> or <code>70</code>):</b>`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (st === "ADM_ADD_CARD_RATE") {
+        const pct = parseFloat(text);
+        if (isNaN(pct) || pct <= 0 || pct > 100) {
+          await sendBotMsg(token, cUid, `⚠️ Enter a valid rate between 1 and 100:`, buildCancelKeyboard());
+          return res.status(200).send("OK");
+        }
+        p.tmpNewCardRate = pct;
+        p.state = "ADM_ADD_CARD_MINMAX";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(
+          token,
+          cUid,
+          `📉 <b>STEP 3 OF 3: ENTER MIN & MAX ₹ AMOUNT</b>\n👇 <b>Send <code>MIN MAX</code> (e.g. <code>10 5000</code>):</b>`,
+          buildCancelKeyboard()
+        );
+        return res.status(200).send("OK");
+      }
+
+      if (st === "ADM_ADD_CARD_MINMAX") {
+        const pts = text.split(/\s+/);
+        const minV = Math.max(1, parseFloat(pts[0]) || 10);
+        const maxV = Math.max(minV, parseFloat(pts[1]) || 5000);
+        const list = getCardList(b);
+        list.push({
+          id: "C" + Date.now(),
+          name: p.tmpNewCardName || "Gift Card",
+          rate: numOrDef(p.tmpNewCardRate, 80),
+          min: minV,
+          max: maxV
+        });
+        b.cardList = list;
+        p.state = "IDLE";
+        await saveBotConfig(dbUrl, basePath, b);
+        await savePlayerState(dbUrl, basePath, cUid, p);
+
+        await sendBotMsg(
+          token,
+          cUid,
+          `✅ <b>GIFT CARD ADDED LIVE!</b>\n━━━━━━━━━━━━━━━━━━━━\n💳 <b>Name:</b> ${escHtml(p.tmpNewCardName)}\n📊 <b>Rate:</b> <code>${p.tmpNewCardRate}%</code>\n📉 <b>Limits:</b> <code>₹${fmtRs(minV)} – ₹${fmtRs(maxV)}</code>`,
+          buildAdminKeyboard(b),
+          TG_EFFECTS.PARTY
+        );
+        return res.status(200).send("OK");
+      }
+
+      // EDIT EXISTING CARD RATE %, MIN ₹, MAX ₹ (INSTANT GLOBAL UPDATE!)
+      if (st === "ADM_EDIT_CARD") {
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        const pts = text.split(/\s+/);
+        const list = getCardList(b);
+        const idx = parseInt(pts[0], 10) - 1;
+        const newRate = parseFloat(pts[1]);
+
+        if (idx >= 0 && idx < list.length && !isNaN(newRate) && newRate > 0 && newRate <= 100) {
+          list[idx].rate = newRate;
+          if (pts.length >= 3 && !isNaN(parseFloat(pts[2]))) list[idx].min = Math.max(1, parseFloat(pts[2]));
+          if (pts.length >= 4 && !isNaN(parseFloat(pts[3]))) list[idx].max = Math.max(list[idx].min, parseFloat(pts[3]));
+          b.cardList = list;
+          await saveBotConfig(dbUrl, basePath, b);
+
+          await sendBotMsg(
+            token,
+            cUid,
+            `✅ <b>UPDATED EVERYWHERE LIVE!</b>\n💳 <b>${escHtml(list[idx].name)}</b>\n📊 <b>New Rate:</b> <code>${list[idx].rate}%</code>\n📉 <b>Limits:</b> <code>₹${fmtRs(list[idx].min)} – ₹${fmtRs(list[idx].max)}</code>`,
+            buildAdminKeyboard(b),
+            TG_EFFECTS.PARTY
+          );
+        } else {
+          await sendBotMsg(token, cUid, `⚠️ Invalid format! Example: <code>1 70</code> or <code>1 70 10 5000</code>`, buildAdminKeyboard(b));
+        }
+        return res.status(200).send("OK");
+      }
+
+      if (st === "ADM_REM_CARD") {
+        p.state = "IDLE";
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        const list = getCardList(b);
+        const idx = parseInt(text.replace(/\D/g, ""), 10) - 1;
+        if (idx >= 0 && idx < list.length) {
+          const rmName = list[idx].name;
+          list.splice(idx, 1);
+          b.cardList = list;
+          await saveBotConfig(dbUrl, basePath, b);
+          await sendBotMsg(token, cUid, `🗑️ <b>Removed Card:</b> ${escHtml(rmName)}`, buildAdminKeyboard(b));
+        } else {
+          await sendBotMsg(token, cUid, `⚠️ Invalid card number!`, buildAdminKeyboard(b));
+        }
+        return res.status(200).send("OK");
+      }
+
+      if (st === "ADM_SET_WELCOME") {
+        p.state = "IDLE";
+        b.welcomeText = text.toUpperCase() === "RESET" ? "" : text;
+        await saveBotConfig(dbUrl, basePath, b);
+        await savePlayerState(dbUrl, basePath, cUid, p);
+        await sendBotMsg(token, cUid, `✅ <b>Welcome Text Updated!</b>`, buildAdminKeyboard(b));
+        return res.status(200).send("OK");
+      }
+
       if (st === "ADM_REPLY_SUPPORT") {
         const target = p.tempSupportUid || "";
         p.state = "IDLE";
@@ -1320,25 +1644,6 @@ export default async function handler(req, res) {
         if (target) {
           await sendBotMsg(token, target, `👨‍💻 <b>ADMIN SUPPORT REPLY:</b>\n\n${escHtml(text)}`);
           await sendBotMsg(token, cUid, `✅ <b>Reply sent to <code>${target}</code>!</b>`, buildAdminKeyboard(b));
-        }
-        return res.status(200).send("OK");
-      }
-
-      if (st === "ADM_EDIT_RATE") {
-        p.state = "IDLE";
-        await savePlayerState(dbUrl, basePath, cUid, p);
-        const pts = text.split(/\s+/);
-        const rates = getCardRates(b);
-        const keys = Object.keys(rates);
-        const idx = parseInt(pts[0], 10) - 1;
-        const newPct = parseFloat(pts[1]);
-        if (idx >= 0 && idx < keys.length && !isNaN(newPct) && newPct > 0 && newPct <= 100) {
-          rates[keys[idx]] = newPct;
-          b.cardRates = rates;
-          await saveBotConfig(dbUrl, basePath, b);
-          await sendBotMsg(token, cUid, `✅ Updated <b>${keys[idx]}</b> rate to <code>${newPct}%</code>!`, buildAdminKeyboard(b));
-        } else {
-          await sendBotMsg(token, cUid, `⚠️ Invalid format! Example: <code>1 90</code>`, buildAdminKeyboard(b));
         }
         return res.status(200).send("OK");
       }
@@ -1388,7 +1693,7 @@ export default async function handler(req, res) {
         if (pts.length >= 2) {
           const tId = pts[0].replace(/\D/g, "");
           const d = parseFloat(pts[1]) || 0;
-          const tp = getOrInitPlayer(players, b, tId, "User " + tId, "");
+          const tp = getOrInitPlayer(players, tId, "User " + tId, "");
           tp.balance = Math.max(0, Number((tp.balance + d).toFixed(2)));
           await savePlayerState(dbUrl, basePath, tId, tp);
           await sendBotMsg(token, cUid, `✅ Updated <code>${tId}</code> balance to <code>₹${fmtRs(tp.balance)}</code>`, buildAdminKeyboard(b));
@@ -1432,7 +1737,7 @@ export default async function handler(req, res) {
         p.state = "IDLE";
         await savePlayerState(dbUrl, basePath, cUid, p);
         if (tId) {
-          const tp = getOrInitPlayer(players, b, tId, "User " + tId, "");
+          const tp = getOrInitPlayer(players, tId, "User " + tId, "");
           tp.banned = !tp.banned;
           await savePlayerState(dbUrl, basePath, tId, tp);
           await sendBotMsg(token, cUid, `✅ User <code>${tId}</code> is now <b>${tp.banned ? "🚫 BANNED" : "🟢 UNBANNED"}</b>`, buildAdminKeyboard(b));
@@ -1445,7 +1750,7 @@ export default async function handler(req, res) {
         await savePlayerState(dbUrl, basePath, cUid, p);
         const ids = Object.keys(players);
         for (const uId of ids) {
-          await sendBotMsg(token, uId, `📢 <b>ANNOUNCEMENT</b>\n━━━━━━━━━━━━━━━━━━━━\n${text}`);
+          await sendBotMsg(token, uId, `📢 <b>OFFICIAL ANNOUNCEMENT</b>\n━━━━━━━━━━━━━━━━━━━━\n${text}`);
         }
         await sendBotMsg(token, cUid, `✅ <b>Broadcast sent to ${ids.length} users!</b>`, buildAdminKeyboard(b));
         return res.status(200).send("OK");
