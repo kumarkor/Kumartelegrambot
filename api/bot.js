@@ -1,13 +1,14 @@
 // ============================================================================
 // 👑 FILE: api/bot.js (OR api/bot1.js) — KURMURYA 24/7 CLOUD WEBHOOK ENGINE 👑
 // Endpoint: https://kumartelegrambot.vercel.app/api/bot (or /api/bot1)
-// Included Modules (0% Forgotten + VIP Auto Channel Reaction & Views Added):
+// Included Modules (0% Removed + Private Channel Auto Reaction & Link Builder):
 // - Works with BOTH api/bot.js and api/bot1.js automatically!
 // - Exact 8-Button Photo Menu + Admin Panel
 // - Normal Users see ONLY Manual Services (₹1 Channel Unlock = Unlimited Manual)
 // - VIP Users ONLY see: ⚡ VIP Auto Reaction & Views (₹100 Default, Admin Configurable)
-// - Automatic Channel Post Detector (channel_post): When Bot is Admin in the
-//   VIP user's channel, ANY new post uploaded automatically gets Views + Reactions!
+// - Supports BOTH Public (@channel) & Private (-100...) Channels in Auto Mode!
+// - Auto-Generates Private Invite Link (createChatInviteLink) + Auto-Joins SMM IDs
+// - Auto-Builds Exact Post Link (Public t.me/user/id & Private t.me/c/id/msgId)
 // - All 73+ Official Telegram Emoji Reactions + Random + Top 8 Mix
 // - Custom Quantity Selector (1, 2, 3, 4, 5, 6... or ALL)
 // - Live Force-Join Check (Public & Private Channels)
@@ -174,7 +175,7 @@ async function saveBotConfig(dbUrl, basePath, botConfigObj) {
 }
 
 // ============================================================================
-// 3. TELEGRAM BOT API HELPERS
+// 3. TELEGRAM BOT API HELPERS + PRIVATE CHANNEL AUTO INVITE LINK GENERATOR
 // ============================================================================
 async function tgPost(token, method, payload = {}) {
   if (!token) return { ok: false };
@@ -228,6 +229,60 @@ async function answerCb(token, cbId, text, showAlert = false) {
     text: text || "Done",
     show_alert: Boolean(showAlert)
   });
+}
+
+/**
+ * Automatically creates or fetches a Private Channel Invite Link using Bot Admin rights!
+ */
+async function generatePrivateInviteLink(token, chatId) {
+  if (!token || !chatId) return "";
+  try {
+    const createRes = await tgPost(token, "createChatInviteLink", {
+      chat_id: String(chatId),
+      name: "Auto Reaction & Views Sync"
+    });
+    if (createRes && createRes.ok && createRes.result && createRes.result.invite_link) {
+      return String(createRes.result.invite_link);
+    }
+
+    const expRes = await tgPost(token, "exportChatInviteLink", {
+      chat_id: String(chatId)
+    });
+    if (expRes && expRes.ok && typeof expRes.result === "string" && expRes.result.startsWith("http")) {
+      return expRes.result;
+    }
+
+    const chatRes = await tgPost(token, "getChat", { chat_id: String(chatId) });
+    if (chatRes && chatRes.ok && chatRes.result && chatRes.result.invite_link) {
+      return String(chatRes.result.invite_link);
+    }
+  } catch (e) {}
+  return "";
+}
+
+/**
+ * Joins all SMM Panel Accounts into a Private Channel using the auto-generated Invite Link
+ * so that Auto Reactions & Auto Views work 100% on Private Channels!
+ */
+async function joinPrivateChannelWithSmmPanel(inviteLink, limitCount) {
+  if (!inviteLink) return false;
+  try {
+    const res = await fetch(SMM_PANEL_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "join",
+        webPin: MASTER_PIN,
+        input: inviteLink,
+        selectedPhones: ["ALL"],
+        limitCount: limitCount || ""
+      })
+    });
+    const data = await res.json().catch(() => null);
+    return Boolean(res.ok && data);
+  } catch (e) {
+    return false;
+  }
 }
 
 // ============================================================================
@@ -441,10 +496,13 @@ async function unlockChannelForUser(dbUrl, basePath, b, p, uid, chKey, isAdm, is
 }
 
 // ============================================================================
-// 6. VIP AUTO CHANNEL REACTION & VIEWS ENGINE (NEW POST DETECTOR!)
+// 6. VIP AUTO CHANNEL REACTION & VIEWS ENGINE (PUBLIC + PRIVATE LINK BUILDER!)
 // ============================================================================
 /**
- * Triggered automatically whenever ANY new post is uploaded in a channel where the Bot is Admin!
+ * Triggered automatically whenever ANY new post is uploaded in a Public OR Private
+ * channel where the Bot is Admin!
+ * Automatically builds the exact post link (t.me/username/id OR t.me/c/id/msgId)
+ * and auto-generates a Private Invite Link so SMM IDs can join and react!
  */
 async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost) {
   if (!channelPost || !channelPost.chat || !channelPost.message_id) return;
@@ -468,12 +526,16 @@ async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost)
   // If this channel is not registered for VIP Auto Reaction & Views, ignore silently
   if (!autoCfg || autoCfg.active === false) return;
 
-  // Build exact Telegram Post Link for SMM Panel API
+  // 1. AUTO-BUILD EXACT TELEGRAM POST LINK (PUBLIC & PRIVATE CHANNELS)
+  const isPrivateChannel = !chat.username;
   let postLink = "";
+  let inviteLink = String(autoCfg.inviteLink || "");
+
   if (chat.username) {
     postLink = `https://t.me/${chat.username}/${msgId}`;
   } else if (chatIdStr.startsWith("-100")) {
-    postLink = `https://t.me/c/${chatIdStr.replace(/^-100/, "")}/${msgId}`;
+    const cleanPrivateId = chatIdStr.replace(/^-100/, "");
+    postLink = `https://t.me/c/${cleanPrivateId}/${msgId}`;
   } else {
     return;
   }
@@ -485,7 +547,24 @@ async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost)
   const ownerUid = String(autoCfg.ownerUid || "");
   const qtyDisplay = limitCount ? limitCount : "ALL IDs";
 
-  // 1. Automatically Trigger Post Views + Post Reactions in parallel!
+  // 2. FOR PRIVATE CHANNELS: AUTO-GENERATE INVITE LINK & ENSURE SMM IDs JOINED!
+  if (isPrivateChannel) {
+    if (!inviteLink) {
+      inviteLink = await generatePrivateInviteLink(token, chatIdStr);
+      if (inviteLink) {
+        autoCfg.inviteLink = inviteLink;
+        autoCfg.isPrivate = true;
+      }
+    }
+    if (inviteLink && !autoCfg.smmJoined) {
+      const joined = await joinPrivateChannelWithSmmPanel(inviteLink, limitCount);
+      if (joined) {
+        autoCfg.smmJoined = true;
+      }
+    }
+  }
+
+  // 3. AUTOMATICALLY TRIGGER POST VIEWS + POST REACTIONS IN PARALLEL!
   let viewsReply = "✅ Auto Views Delivered!";
   let reactReply = "✅ Auto Reactions Delivered!";
 
@@ -495,7 +574,9 @@ async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost)
       webPin: MASTER_PIN,
       postLink: postLink,
       selectedPhones: ["ALL"],
-      limitCount: limitCount
+      limitCount: limitCount,
+      isPrivate: isPrivateChannel,
+      inviteLink: inviteLink
     };
 
     const reactPayload = {
@@ -504,7 +585,9 @@ async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost)
       postLink: postLink,
       selectedPhones: ["ALL"],
       emoji: emoji,
-      limitCount: limitCount
+      limitCount: limitCount,
+      isPrivate: isPrivateChannel,
+      inviteLink: inviteLink
     };
     if (emojiList.length > 0) {
       reactPayload.emojiList = emojiList;
@@ -527,10 +610,11 @@ async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost)
     if (rRes && rRes.reply) reactReply = rRes.reply;
   } catch (e) {}
 
-  // 2. Update stats and notify VIP owner on Telegram
+  // 4. UPDATE STATS & NOTIFY VIP OWNER ON TELEGRAM
   autoCfg.totalAutoPosts = numOrDef(autoCfg.totalAutoPosts, 0) + 1;
   autoCfg.lastPostLink = postLink;
   autoCfg.lastTriggeredAt = timeStampStr();
+  autoCfg.isPrivate = isPrivateChannel;
 
   const saveKey = keyByUsername && autoChannels[keyByUsername] ? keyByUsername : keyById;
   if (saveKey) {
@@ -563,8 +647,9 @@ async function handleAutomaticChannelPost(dbUrl, basePath, b, node, channelPost)
       ownerUid,
       `⚡ <b>VIP AUTO CHANNEL REACTION & VIEWS DELIVERED!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `📢 <b>Channel:</b> ${escHtml(chatTitle)}\n` +
-        `🎯 <b>New Post Detected:</b> <code>${escHtml(postLink)}</code>\n` +
+        `📢 <b>Channel:</b> ${escHtml(chatTitle)} (${isPrivateChannel ? "🔒 Private" : "📢 Public"})\n` +
+        `🔗 <b>Auto-Generated Post Link:</b> <code>${escHtml(postLink)}</code>\n` +
+        (isPrivateChannel && inviteLink ? `🔑 <b>Auto Invite Link:</b> <code>${escHtml(inviteLink)}</code>\n` : "") +
         `❤️ <b>Auto Reactions:</b> ${escHtml(emojiLabel)} (<code>${escHtml(qtyDisplay)}</code>)\n` +
         `👀 <b>Auto Views:</b> <code>${escHtml(qtyDisplay)}</code>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -660,6 +745,8 @@ function getOrInitPlayer(players, b, uid, name, uname) {
       tempLineVoteMode: "LAST",
       tempAutoChannelKey: "",
       tempAutoEmojiRaw: "RANDOM",
+      tempAutoIsPrivate: false,
+      tempAutoInviteLink: "",
       tempSupportUid: "",
       tempPrivId: "",
       tempCodeName: "",
@@ -814,7 +901,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       endpoint: dynamicWebhookBase,
-      engine: "Kurmurya 24/7 Cloud Webhook Engine (VIP Auto Channel Reaction + 73+ Emojis + Quantity)",
+      engine: "Kurmurya 24/7 Cloud Webhook Engine (Public + Private Auto Channel Reaction + 73+ Emojis)",
       status: "24/7_ONLINE"
     });
   }
@@ -827,6 +914,13 @@ export default async function handler(req, res) {
   // --------------------------------------------------------------------------
   if (!botId && body.action) {
     try {
+      if (body.action === "delete_bot" && body.botId) {
+        const delId = String(body.botId);
+        await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${delId}`, "DELETE");
+        await fbRequest(MIRROR_FIREBASE_URL, `kumar_cloud/bots/${delId}`, "DELETE");
+        return res.status(200).json({ success: true });
+      }
+
       if (body.action === "connect_bot") {
         const token = String(body.token || "").trim();
         const owner = String(body.adminId || body.owner || MASTER_ADMIN).replace(/\D/g, "");
@@ -858,6 +952,7 @@ export default async function handler(req, res) {
         const existing = (await fbRequest(PRIMARY_FIREBASE_URL, `kumar_cloud/bots/${bId}`, "GET")) || {};
         const cfg = existing.botConfig || {
           id: bId,
+          botType: "CHANNEL_SMM",
           token,
           username: uname,
           name: bName,
@@ -879,6 +974,7 @@ export default async function handler(req, res) {
         };
         cfg.token = token;
         cfg.owner = owner;
+        cfg.botType = "CHANNEL_SMM";
         cfg.webhookActive = true;
         cfg.webhookAllowedUpdatesFixed = true;
         cfg.webhookUrl = whUrl;
@@ -905,12 +1001,12 @@ export default async function handler(req, res) {
             `🤖 <b>Bot:</b> @${escHtml(uname)}\n` +
             `🆔 <b>Admin ID:</b> <code>${owner}</code>\n` +
             `🔓 <b>Manual Channel Unlock:</b> <code>₹${fmtRs(cfg.channelUnlockPrice)} / Channel</code>\n` +
-            `⚡ <b>VIP Auto Channel Rate:</b> <code>₹${fmtRs( numOrDef(cfg.autoChannelPrice, 100) )} / Channel</code>\n\n` +
+            `⚡ <b>VIP Auto Channel (Public & Private):</b> <code>₹${fmtRs(numOrDef(cfg.autoChannelPrice, 100))} / Channel</code>\n\n` +
             `👇 Send <b>/start</b> to open the Photo Menu & <b>👑 Admin Panel</b>!`,
           buildMainPhotoKeyboard(true)
         );
 
-        return res.status(200).json({ success: true, botId: bId, botUsername: uname, webhookUrl: whUrl });
+        return res.status(200).json({ success: true, botId: bId, botName: bName, botUsername: uname, webhookUrl: whUrl });
       }
     } catch (e) {
       return res.status(200).json({ success: false, error: e.message });
@@ -965,7 +1061,7 @@ export default async function handler(req, res) {
       await fbRequest(dbUrl, `${basePath}/lastWebhookUpdateId`, "PUT", incomingUpdateId);
     }
 
-    // 2. HANDLE AUTOMATIC CHANNEL POSTS (WHEN ANY POST IS UPLOADED IN A VIP AUTO CHANNEL!)
+    // 2. HANDLE AUTOMATIC CHANNEL POSTS (PUBLIC & PRIVATE CHANNELS!)
     if (upd.channel_post) {
       if (b.active !== false && b.isRunning !== false) {
         await handleAutomaticChannelPost(dbUrl, basePath, b, node, upd.channel_post);
@@ -1158,13 +1254,19 @@ export default async function handler(req, res) {
         ? photoArr[photoArr.length - 1].file_id || ""
         : "";
 
-    // If user forwarded a post from their channel, auto-extract channel username or -100 ID
+    // Extract Channel Username OR Private Channel ID (-100...) from ANY forwarded post!
+    // Supports BOTH legacy `forward_from_chat` AND Telegram Bot API 7.0+ `forward_origin.chat`!
     let forwardedChannelKey = "";
-    if (msgObj.forward_from_chat && msgObj.forward_from_chat.type === "channel") {
-      if (msgObj.forward_from_chat.username) {
-        forwardedChannelKey = "@" + String(msgObj.forward_from_chat.username).toLowerCase();
-      } else if (msgObj.forward_from_chat.id) {
-        forwardedChannelKey = String(msgObj.forward_from_chat.id);
+    const fwdChat =
+      (msgObj.forward_origin && msgObj.forward_origin.type === "channel" && msgObj.forward_origin.chat) ||
+      (msgObj.forward_from_chat && msgObj.forward_from_chat.type === "channel" && msgObj.forward_from_chat) ||
+      null;
+
+    if (fwdChat) {
+      if (fwdChat.username) {
+        forwardedChannelKey = "@" + String(fwdChat.username).toLowerCase();
+      } else if (fwdChat.id) {
+        forwardedChannelKey = String(fwdChat.id);
       }
     }
 
@@ -1263,8 +1365,9 @@ export default async function handler(req, res) {
           `📌 <b>1. Manual Channel Unlock (₹${fmtRs(chUnlockPrice)}):</b>\n` +
           `• Unlock a channel for ₹${fmtRs(chUnlockPrice)} to send unlimited manual Reactions, Views, Polls & Line Votes.\n\n` +
           `⚡ <b>2. VIP Auto Reaction & Views (₹${fmtRs(autoChannelPrice)} Recharge):</b>\n` +
-          `• Make this Bot Admin in your channel & activate Auto Mode for <b>₹${fmtRs(autoChannelPrice)}</b>.\n` +
-          `• Whenever ANY new post is uploaded in your channel, Auto Views & Auto Reactions will be delivered automatically 24/7!\n\n`;
+          `• Supports <b>BOTH Public & Private Channels</b>!\n` +
+          `• Make this Bot Admin in your Public/Private Channel & activate Auto Mode for <b>₹${fmtRs(autoChannelPrice)}</b>.\n` +
+          `• Whenever ANY new post is uploaded, the bot auto-generates the post link & delivers Auto Views + Auto Reactions 24/7!\n\n`;
       } else {
         msg +=
           `\n📌 <b>Mandatory ₹${fmtRs(chUnlockPrice)} Channel Rule:</b>\n` +
@@ -1278,10 +1381,9 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // ---- VIP EXCLUSIVE BUTTON 1: ⚡ Auto Reaction & Views (₹100) ----
+    // ---- VIP EXCLUSIVE BUTTON 1: ⚡ Auto Reaction & Views (₹100) [PUBLIC + PRIVATE] ----
     if (text.startsWith("⚡ Auto Reaction & Views")) {
       if (!isVip) {
-        // Hidden from normal users; if typed manually, block access
         await sendBotMsg(
           token,
           cUid,
@@ -1297,7 +1399,7 @@ export default async function handler(req, res) {
           cUid,
           `❌ <b>INSUFFICIENT BALANCE FOR VIP AUTO CHANNEL!</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `⚡ <b>Feature:</b> 24/7 Automatic Channel Views & Reactions\n` +
+            `⚡ <b>Feature:</b> 24/7 Automatic Channel Views & Reactions (Public & Private)\n` +
             `🏷️ <b>Required Recharge:</b> <code>₹${fmtRs(autoChannelPrice)} / Channel</code>\n` +
             `💰 <b>Your Wallet Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
             `⚠️ <i>Note: ₹${fmtRs(chUnlockPrice)} manual unlock does NOT apply to Automatic Mode. Please tap <b>💳 Top Up</b> and recharge ₹${fmtRs(autoChannelPrice)} first!</i>`,
@@ -1312,13 +1414,14 @@ export default async function handler(req, res) {
       await sendBotMsg(
         token,
         cUid,
-        `⚡ <b>SETUP VIP 24/7 AUTO CHANNEL REACTION & VIEWS</b>\n` +
+        `⚡ <b>SETUP VIP 24/7 AUTO CHANNEL (PUBLIC & PRIVATE SUPPORTED)</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `🏷️ <b>Activation Charge:</b> <code>-₹${fmtRs(autoChannelPrice)} (One-Time per Channel)</code>\n` +
           `💰 <b>Your Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
           `📌 <b>IMPORTANT STEP 1:</b>\n` +
-          `First, add this Bot (<b>@${escHtml(b.username || "Bot")}</b>) as an <b>Administrator</b> in your Telegram Channel!\n\n` +
-          `👇 <b>STEP 1 OF 3: Send your Channel <code>@username</code>, Private Channel ID (<code>-100...</code>), OR forward any post from your channel here:</b>`,
+          `Add this Bot (<b>@${escHtml(b.username || "Bot")}</b>) as an <b>Administrator</b> in your Public or Private Channel!\n` +
+          `🔒 <i>For Private Channels: Make sure "Invite Users via Link" permission is ON so the bot can auto-create the link!</i>\n\n` +
+          `👇 <b>STEP 1 OF 3: Send Public <code>@username</code>, Private Channel ID (<code>-100...</code>), Private Post Link (<code>t.me/c/...</code>), OR simply FORWARD any post from your channel here:</b>`,
         buildCancelKeyboard()
       );
       return res.status(200).send("OK");
@@ -1330,23 +1433,29 @@ export default async function handler(req, res) {
       p.state = "IDLE";
       await savePlayerState(dbUrl, basePath, cUid, p);
 
+      const seenIds = new Set();
       const myAutoList = [];
       for (const k of Object.keys(autoChannels)) {
         const ac = autoChannels[k];
         if (ac && (String(ac.ownerUid) === cUid || isAdm)) {
-          myAutoList.push(ac);
+          const uniq = String(ac.chatId || ac.channelKey);
+          if (!seenIds.has(uniq)) {
+            seenIds.add(uniq);
+            myAutoList.push(ac);
+          }
         }
       }
 
       let sb = `🤖 <b>MY 24/7 AUTO REACTION & VIEW CHANNELS</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
       if (myAutoList.length === 0) {
-        sb += `📭 You haven't activated any Auto Channel yet!\nTap <b>⚡ Auto Reaction & Views (₹${fmtRs(autoChannelPrice)})</b> to activate 24/7 automatic reactions & views on your channel.`;
+        sb += `📭 You haven't activated any Auto Channel yet!\nTap <b>⚡ Auto Reaction & Views (₹${fmtRs(autoChannelPrice)})</b> to activate 24/7 automatic reactions & views on your Public or Private channel.`;
       } else {
         myAutoList.forEach((ac, idx) => {
           sb +=
-            `<b>[${idx + 1}] <code>${escHtml(ac.channelKey)}</code> (${escHtml(ac.title || "Channel")})</b>\n` +
+            `<b>[${idx + 1}] ${ac.isPrivate ? "🔒" : "📢"} <code>${escHtml(ac.channelKey)}</code> (${escHtml(ac.title || "Channel")})</b>\n` +
             ` ┣ ❤️ Emoji: ${escHtml(ac.emojiLabel || ac.emoji || "RANDOM")}\n` +
             ` ┣ 🔢 Quantity per Post: <code>${escHtml(ac.limitCount || "ALL IDs")}</code>\n` +
+            (ac.isPrivate && ac.inviteLink ? ` ┣ 🔗 Auto Invite: <code>${escHtml(ac.inviteLink)}</code>\n` : "") +
             ` ┗ 📦 Auto Posts Delivered: <code>${numOrDef(ac.totalAutoPosts, 0)}</code> (🟢 24/7 ACTIVE)\n\n`;
         });
       }
@@ -1621,7 +1730,7 @@ export default async function handler(req, res) {
             `🔓 <b>Manual Channel Unlock:</b> <code>₹${fmtRs(chUnlockPrice)}</code>\n` +
             `⚡ <b>VIP Auto Channel Price:</b> <code>₹${fmtRs(autoChannelPrice)}</code>\n` +
             `👑 <b>VIP Members:</b> <code>${vipCount} Users</code>\n` +
-            `🤖 <b>Active Auto Channels:</b> <code>${autoChCount} Channels</code>\n` +
+            `🤖 <b>Active Auto Channels:</b> <code>${autoChCount} Nodes</code>\n` +
             `👥 <b>Refer Bonus:</b> <code>₹${fmtRs(referBonus)}</code> | 🎁 <b>Daily:</b> <code>₹${fmtRs(dailyBonus)}</code>\n` +
             `💳 <b>UPI ID:</b> <code>${escHtml(b.upiId || "Not Set")}</code>\n\n` +
             `👇 <b>Select an Admin tool below:</b>`,
@@ -1693,9 +1802,10 @@ export default async function handler(req, res) {
         keys.forEach((k, idx) => {
           const ac = autoChannels[k];
           sb +=
-            `<b>[${idx + 1}] <code>${escHtml(ac.channelKey)}</code> (${escHtml(ac.title || "Channel")})</b>\n` +
+            `<b>[${idx + 1}] ${ac.isPrivate ? "🔒" : "📢"} <code>${escHtml(ac.channelKey)}</code> (${escHtml(ac.title || "Channel")})</b>\n` +
             ` ┣ 👤 Owner ID: <code>${ac.ownerUid}</code>\n` +
             ` ┣ ❤️ Emoji: ${escHtml(ac.emojiLabel || ac.emoji)} | 🔢 Qty: <code>${escHtml(ac.limitCount || "ALL")}</code>\n` +
+            (ac.inviteLink ? ` ┣ 🔗 Invite: <code>${escHtml(ac.inviteLink)}</code>\n` : "") +
             ` ┗ 📦 Auto Posts: <code>${numOrDef(ac.totalAutoPosts, 0)}</code>\n\n`;
         });
         sb += `👇 <i>To remove an Auto Channel, send its <code>@username</code> or <code>-100...</code> ID now, or tap ❌ Cancel:</i>`;
@@ -1968,20 +2078,20 @@ export default async function handler(req, res) {
       return res.status(200).send("OK");
     }
 
-    // ---- VIP FLOW: SETUP 24/7 AUTO CHANNEL REACTION & VIEWS (₹100) ----
+    // ---- VIP FLOW: SETUP 24/7 AUTO CHANNEL (PUBLIC & PRIVATE + AUTO INVITE LINK!) ----
     if (st === "WAIT_VIP_AUTO_CH_INPUT") {
       const rawCh = forwardedChannelKey || extractChannelKey(text);
       if (!rawCh) {
         await sendBotMsg(
           token,
           cUid,
-          `❌ <b>Invalid Channel!</b>\nPlease send your Channel <code>@username</code>, Private ID (<code>-100...</code>), or forward a post from your channel:`,
+          `❌ <b>Invalid Channel!</b>\nPlease send your Public <code>@username</code>, Private ID (<code>-100...</code>), Private Post Link (<code>t.me/c/...</code>), or <b>forward any post</b> from your channel:`,
           buildCancelKeyboard()
         );
         return res.status(200).send("OK");
       }
 
-      // Verify Bot is added as Admin in the target channel!
+      // 1. Verify Bot is added as Admin in the target Public/Private Channel!
       const botNumericId = Number(String(token).split(":")[0]);
       const memberCheck = await tgPost(token, "getChatMember", {
         chat_id: rawCh,
@@ -1995,22 +2105,48 @@ export default async function handler(req, res) {
           `⚠️ <b>BOT IS NOT ADMIN IN ${escHtml(rawCh)}!</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
             `To detect new posts automatically 24/7, you MUST add <b>@${escHtml(b.username || "Bot")}</b> as an <b>Administrator</b> in <code>${escHtml(rawCh)}</code> first!\n\n` +
-            `👉 <i>Add the bot as Admin in your channel, then send <code>${escHtml(rawCh)}</code> again:</i>`,
+            `👉 <i>Add the bot as Admin in your channel, then forward a post or send <code>${escHtml(rawCh)}</code> again:</i>`,
           buildCancelKeyboard()
         );
         return res.status(200).send("OK");
       }
 
+      // 2. Detect Public vs Private Channel & Auto-Generate Invite Link for Private Channels!
+      const chatRes = await tgPost(token, "getChat", { chat_id: rawCh });
+      const chatInfo = chatRes && chatRes.ok ? chatRes.result : {};
+      const isPriv = !chatInfo.username;
+      let autoInviteLink = "";
+
+      if (isPriv) {
+        autoInviteLink = await generatePrivateInviteLink(token, chatInfo.id || rawCh);
+        if (!autoInviteLink) {
+          await sendBotMsg(
+            token,
+            cUid,
+            `⚠️ <b>PRIVATE CHANNEL PERMISSION NEEDED!</b>\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `Bot is Admin in <b>${escHtml(chatInfo.title || rawCh)}</b>, but could not auto-create an Invite Link.\n` +
+              `👉 Please enable <b>"Invite Users via Link"</b> permission for <b>@${escHtml(b.username || "Bot")}</b> in your Private Channel settings, then send <code>${escHtml(rawCh)}</code> again!`,
+            buildCancelKeyboard()
+          );
+          return res.status(200).send("OK");
+        }
+      }
+
       p.tempAutoChannelKey = rawCh;
+      p.tempAutoIsPrivate = isPriv;
+      p.tempAutoInviteLink = autoInviteLink;
       p.state = "WAIT_VIP_AUTO_EMOJI";
       await savePlayerState(dbUrl, basePath, cUid, p);
 
       await sendBotMsg(
         token,
         cUid,
-        `✅ <b>BOT ADMIN VERIFIED IN ${escHtml(rawCh)}!</b>\n` +
+        `✅ <b>BOT ADMIN VERIFIED IN ${isPriv ? "🔒 PRIVATE" : "📢 PUBLIC"} CHANNEL!</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `❤️ <b>STEP 2 OF 3: Which Emoji Reactions should come automatically on every new post?</b>\n` +
+          `📢 <b>Channel:</b> ${escHtml(chatInfo.title || rawCh)} (<code>${escHtml(rawCh)}</code>)\n` +
+          (isPriv ? `🔗 <b>Auto-Generated Invite Link:</b> <code>${escHtml(autoInviteLink)}</code> ✅\n` : "") +
+          `\n❤️ <b>STEP 2 OF 3: Which Emoji Reactions should come automatically on every new post?</b>\n` +
           `Select from All 73+ Emojis below, tap <b>🎲 RANDOM</b> / <b>🔥 TOP 8 MIX</b>, or type multiple emojis separated by space:`,
         buildAll73EmojiKeyboard()
       );
@@ -2056,19 +2192,34 @@ export default async function handler(req, res) {
       const cTitle = chatObj.title || chKey;
       const unameKey = chatObj.username ? "@" + String(chatObj.username).toLowerCase() : "";
       const idKey = chatObj.id ? String(chatObj.id) : "";
+      const isPriv = !chatObj.username;
+      let inviteLink = String(p.tempAutoInviteLink || "");
+
+      if (isPriv && !inviteLink) {
+        inviteLink = await generatePrivateInviteLink(token, idKey || chKey);
+      }
+
+      // For Private Channels: Auto-Join SMM Panel Accounts immediately via generated Invite Link!
+      let smmJoined = false;
+      if (isPriv && inviteLink) {
+        smmJoined = await joinPrivateChannelWithSmmPanel(inviteLink, limitCount);
+      }
 
       // Deduct ₹100 (autoChannelPrice)
       p.balance = Number((numOrDef(p.balance, 0) - autoChannelPrice).toFixed(2));
       p.state = "IDLE";
       if (!Array.isArray(p.autoChannels)) p.autoChannels = [];
       if (!p.autoChannels.includes(chKey)) p.autoChannels.push(chKey);
-      addHistory(p, `⚡ Activated VIP Auto Channel ${chKey}: -₹${fmtRs(autoChannelPrice)}`);
+      addHistory(p, `⚡ Activated VIP ${isPriv ? "Private" : "Public"} Auto Channel ${chKey}: -₹${fmtRs(autoChannelPrice)}`);
 
       const autoRecord = {
         channelKey: chKey,
         title: cTitle,
         chatId: idKey,
         username: unameKey,
+        isPrivate: isPriv,
+        inviteLink: inviteLink,
+        smmJoined: smmJoined,
         ownerUid: cUid,
         ownerName: cName,
         emoji: parsedEm.emoji,
@@ -2097,12 +2248,13 @@ export default async function handler(req, res) {
         cUid,
         `🎉 <b>VIP 24/7 AUTO CHANNEL ACTIVATED!</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `📢 <b>Channel:</b> ${escHtml(cTitle)} (<code>${escHtml(chKey)}</code>)\n` +
+          `📢 <b>Channel:</b> ${escHtml(cTitle)} (${isPriv ? "🔒 Private" : "📢 Public"} | <code>${escHtml(chKey)}</code>)\n` +
+          (isPriv && inviteLink ? `🔗 <b>Auto Invite Link:</b> <code>${escHtml(inviteLink)}</code>\n🤖 <b>SMM Accounts Joined:</b> ${smmJoined ? "🟢 YES" : "⏳ On First Post"}\n` : "") +
           `❤️ <b>Auto Reactions:</b> ${escHtml(parsedEm.label)}\n` +
           `👀 <b>Auto Views + Reactions Qty:</b> <code>${escHtml(qtyDisplay)} / Post</code>\n` +
           `💸 <b>Recharge Deducted:</b> <code>-₹${fmtRs(autoChannelPrice)}</code>\n` +
           `💰 <b>Remaining Balance:</b> <code>₹${fmtRs(p.balance)}</code>\n\n` +
-          `🔥 <b>Now upload ANY new post in <code>${escHtml(chKey)}</code> — Views & Reactions will arrive automatically within seconds!</b>`,
+          `🔥 <b>Now upload ANY new post in <code>${escHtml(cTitle)}</code> — the bot will auto-build the post link & deliver Views + Reactions within seconds!</b>`,
         buildOrderSubKeyboard(chUnlockPrice, autoChannelPrice, isVip)
       );
       return res.status(200).send("OK");
@@ -2110,7 +2262,7 @@ export default async function handler(req, res) {
 
     // ---- STEP: MANUAL UNLOCK CHANNEL (₹1) ----
     if (st === "WAIT_UNLOCK_CHANNEL" || st === "WAIT_UNLOCK_CHANNEL_INPUT") {
-      const chKey = extractChannelKey(text);
+      const chKey = forwardedChannelKey || extractChannelKey(text);
       if (!chKey) {
         await sendBotMsg(
           token,
@@ -2529,7 +2681,6 @@ export default async function handler(req, res) {
     // 6. ADMIN MULTI-STEP INPUT FLOWS (VIP + AUTO CHANNEL PRICE + ALL TOOLS)
     // ========================================================================
     if (isAdm) {
-      // Admin Add / Remove VIP User
       if (st === "ADM_TOGGLE_VIP_UID") {
         const targetUid = text.replace(/\D/g, "");
         p.state = "IDLE";
@@ -2561,7 +2712,7 @@ export default async function handler(req, res) {
             targetUid,
             `👑 <b>CONGRATULATIONS! YOU ARE NOW A VIP MEMBER!</b>\n` +
               `━━━━━━━━━━━━━━━━━━━━\n` +
-              `Admin has unlocked <b>⚡ VIP 24/7 Auto Channel Reaction & Views</b> in your <b>👁️ Order View</b> menu!\n\n` +
+              `Admin has unlocked <b>⚡ VIP 24/7 Auto Channel Reaction & Views</b> (Public & Private Channels) in your <b>👁️ Order View</b> menu!\n\n` +
               `👉 Tap <b>👁️ Order View</b> to see your new VIP button!`
           );
         } else {
@@ -2580,7 +2731,6 @@ export default async function handler(req, res) {
         return res.status(200).send("OK");
       }
 
-      // Admin Set Auto Channel ₹ Price (Default ₹100)
       if (st === "ADM_SET_AUTO_CH_PRICE") {
         const v = Math.max(1, numOrDef(text, 100));
         b.autoChannelPrice = v;
@@ -2597,14 +2747,20 @@ export default async function handler(req, res) {
         return res.status(200).send("OK");
       }
 
-      // Admin Remove Auto Channel
       if (st === "ADM_REMOVE_AUTO_CH") {
         const rmKey = sanitizeFirebaseKey(extractChannelKey(text) || text);
         p.state = "IDLE";
         await savePlayerState(dbUrl, basePath, cUid, p);
 
         if (rmKey && autoChannels[rmKey]) {
+          const targetObj = autoChannels[rmKey];
           await fbRequest(dbUrl, `${basePath}/autoChannels/${rmKey}`, "DELETE");
+          if (targetObj.chatId) {
+            await fbRequest(dbUrl, `${basePath}/autoChannels/${sanitizeFirebaseKey(targetObj.chatId)}`, "DELETE");
+          }
+          if (targetObj.username) {
+            await fbRequest(dbUrl, `${basePath}/autoChannels/${sanitizeFirebaseKey(targetObj.username)}`, "DELETE");
+          }
           await sendBotMsg(
             token,
             cUid,
